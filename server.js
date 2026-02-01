@@ -1,3 +1,7 @@
+const serviceAccount = require('./firebase-service-account.json');
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 const express = require('express');
 const cors = require('cors');
 const stripe = require('stripe');
@@ -251,4 +255,5 @@ app.get('/api/health', (req, res) => {
 app.listen(port, '0.0.0.0', () => {
   console.log(`BoatTaxie backend server running on port ${port}`);
   console.log(`Make sure to set your STRIPE_SECRET_KEY environment variable`);
+
 });
