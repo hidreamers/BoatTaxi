@@ -1,8 +1,3 @@
-const admin = require('firebase-admin');
-const serviceAccount = require('./firebase-service-account.json');
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
 const express = require('express');
 const cors = require('cors');
 const stripe = require('stripe');
@@ -20,9 +15,14 @@ const port = process.env.PORT || 3000;
 const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 
 // Initialize Firebase Admin
-admin.initializeApp();
+const serviceAccount = require('./firebase-service-account.json');
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
 const db = admin.firestore();
+
+// ... rest of the code
 
 // Subscription plans mapping
 const SUBSCRIPTION_PLANS = {
@@ -258,4 +258,5 @@ app.listen(port, '0.0.0.0', () => {
   console.log(`Make sure to set your STRIPE_SECRET_KEY environment variable`);
 
 });
+
 
