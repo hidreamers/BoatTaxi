@@ -393,24 +393,26 @@ app.post('/api/create-ad-checkout-session', async (req, res) => {
       return res.status(400).json({ error: 'Invalid duration or featured status' });
     }
 
-    // Create ad in Firestore as draft
-    const adRef = await db.collection('ads').add({
-      businessName,
-      title,
-      description,
-      imageUri,
-      logoUri,
-      youtubeUrl,
-      phone,
-      email,
-      website,
-      category,
-      durationDays,
-      isFeatured,
-      location,
+    // Create ad in Firestore as draft (filter out undefined values)
+    const adData = {
+      businessName: businessName || '',
+      title: title || '',
+      description: description || '',
+      imageUri: imageUri || '',
+      logoUri: logoUri || '',
+      youtubeUrl: youtubeUrl || '',
+      phone: phone || '',
+      email: email || '',
+      website: website || '',
+      category: category || '',
+      durationDays: durationDays || 7,
+      isFeatured: isFeatured || false,
+      location: location || '',
       status: 'draft',
       createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    
+    const adRef = await db.collection('ads').add(adData);
 
     const adId = adRef.id;
 
