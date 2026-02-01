@@ -7,6 +7,7 @@ require('dotenv').config();
 console.log('Environment check:');
 console.log('STRIPE_SECRET_KEY exists:', !!process.env.STRIPE_SECRET_KEY);
 console.log('STRIPE_SECRET_KEY starts with:', process.env.STRIPE_SECRET_KEY?.substring(0, 10));
+console.log('FIREBASE_PROJECT_ID exists:', !!process.env.FIREBASE_PROJECT_ID);
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -14,11 +15,28 @@ const port = process.env.PORT || 3000;
 // Initialize Stripe with your secret key
 const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 
-// Initialize Firebase Admin with service account
-const serviceAccount = require('./firebase-service-account.json');
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+// Initialize Firebase Admin with environment variables
+let firebaseConfig;
+if (process.env.FIREBASE_PRIVATE_KEY) {
+  // Use environment variables (for Railway)
+  firebaseConfig = {
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID || 'boat-taxie',
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+    })
+  };
+  console.log('Using Firebase credentials from environment variables');
+} else {
+  // Fallback to JSON file (for local development)
+  const serviceAccount = require('./firebase-service-account.json');
+  firebaseConfig = {
+    credential: admin.credential.cert(serviceAccount)
+  };
+  console.log('Using Firebase credentials from JSON file');
+}
+
+admin.initializeApp(firebaseConfig);
 
 const db = admin.firestore();
 
