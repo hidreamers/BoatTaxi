@@ -1,3 +1,4 @@
+const admin = require('firebase-admin');
 const serviceAccount = require('./firebase-service-account.json');
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -257,3 +258,4 @@ app.listen(port, '0.0.0.0', () => {
   console.log(`Make sure to set your STRIPE_SECRET_KEY environment variable`);
 
 });
+
