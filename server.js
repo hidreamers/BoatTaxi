@@ -4,6 +4,21 @@ const stripe = require('stripe');
 const admin = require('firebase-admin');
 require('dotenv').config();
 
+// Schedule ad expiration to run every hour
+function startAdExpirationScheduler() {
+  // Run every hour (3600000 milliseconds)
+  setInterval(async () => {
+    try {
+      const count = await expireOldAds();
+      console.log(`Scheduled: Expired ${count} ads at ${new Date().toISOString()}`);
+    } catch (err) {
+      console.error('Scheduled ad expiration failed:', err);
+    }
+  }, 60 * 60 * 1000); // 1 hour
+  
+  console.log('Ad expiration scheduler started (runs every hour)');
+}
+
 console.log('Environment check:');
 console.log('STRIPE_SECRET_KEY exists:', !!process.env.STRIPE_SECRET_KEY);
 console.log('STRIPE_SECRET_KEY starts with:', process.env.STRIPE_SECRET_KEY?.substring(0, 10));
@@ -512,6 +527,8 @@ app.listen(port, '0.0.0.0', () => {
   // Run ad expiration check on startup
   expireOldAds().then(count => {
     console.log(`Startup: Expired ${count} ads`);
+    // Start the hourly scheduler after startup check
+    startAdExpirationScheduler();
   }).catch(err => {
     console.error('Startup ad expiration failed:', err);
   });
