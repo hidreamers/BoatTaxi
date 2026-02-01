@@ -14,8 +14,11 @@ const port = process.env.PORT || 3000;
 // Initialize Stripe with your secret key
 const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 
-// Initialize Firebase Admin
-admin.initializeApp();
+// Initialize Firebase Admin with service account
+const serviceAccount = require('./firebase-service-account.json');
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
 const db = admin.firestore();
 
