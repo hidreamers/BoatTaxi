@@ -1,3 +1,11 @@
+case 'payment_link.succeeded':
+  const link = event.data.object;
+  const adId = link.metadata.adId;
+  const userId = link.metadata.userId;
+  // Activate ad in Firestore
+  console.log(`Ad ${adId} activated for user ${userId}`);
+  break;
+
 const express = require('express');
 const cors = require('cors');
 const stripe = require('stripe');
@@ -258,5 +266,36 @@ app.listen(port, '0.0.0.0', () => {
   console.log(`Make sure to set your STRIPE_SECRET_KEY environment variable`);
 
 });
+
+// Create Payment Link endpoint for ads
+app.post('/api/create-payment-link', async (req, res) => {
+  try {
+    const { amount, currency = 'usd', description, adId, userId } = req.body;
+
+    const paymentLink = await stripeClient.paymentLinks.create({
+      line_items: [
+        {
+          price_data: {
+            currency: currency,
+            product_data: { name: description },
+            unit_amount: amount,
+          },
+          quantity: 1,
+        },
+      ],
+      after_completion: {
+        type: 'redirect',
+        redirect: { url: 'boattaxie://success' }
+      },
+      metadata: { adId, userId }
+    });
+
+    res.json({ url: paymentLink.url });
+  } catch (error) {
+    console.error('Error creating payment link:', error);
+    res.status(500).json({ error: 'Failed to create payment link' });
+  }
+});
+
 
 
