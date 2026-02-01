@@ -1,0 +1,17 @@
+*.log
+.gradle/
+build/
+app/build/
+backend/node_modules/
+backend/.env
+backend/firebase-service-account.json
+backup/
+*.apk
+*.aab
+.DS_Store
+.idea/
+*.iml
+local.properties
+captures/
+*.jks
+*.keystore

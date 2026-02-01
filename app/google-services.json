@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "37126992301",
+    "project_id": "boat-taxie",
+    "storage_bucket": "boat-taxie.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:37126992301:android:78afac1827f7f53160b124",
+        "android_client_info": {
+          "package_name": "com.boattaxie.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD_3Zp8tKabPK4lpeuj-6i6DQNJx9w3irs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

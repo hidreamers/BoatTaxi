@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="camera_photos" path="." />
+    <files-path name="verification_docs" path="verification_docs/" />
+    <files-path name="ads_images" path="ads_images/" />
+    <external-files-path name="external_files" path="." />
+</paths>

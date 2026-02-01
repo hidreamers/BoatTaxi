@@ -1,0 +1,450 @@
+<resources>
+    <string name="app_name">BoatTaxie</string>
+    
+    <!-- Common -->
+    <string name="loading">Loading...</string>
+    <string name="error">Error</string>
+    <string name="success">Success</string>
+    <string name="cancel">Cancel</string>
+    <string name="confirm">Confirm</string>
+    <string name="save">Save</string>
+    <string name="next">Next</string>
+    <string name="back">Back</string>
+    <string name="done">Done</string>
+    <string name="retry">Retry</string>
+    <string name="ok">OK</string>
+    
+    <!-- Auth -->
+    <string name="welcome_title">Welcome to BoatTaxie</string>
+    <string name="welcome_subtitle">Book boats and taxis with ease</string>
+    <string name="login">Login</string>
+    <string name="sign_up">Sign Up</string>
+    <string name="logout">Logout</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="confirm_password">Confirm Password</string>
+    <string name="forgot_password">Forgot Password?</string>
+    <string name="full_name">Full Name</string>
+    <string name="phone_number">Phone Number</string>
+    <string name="already_have_account">Already have an account? Login</string>
+    <string name="dont_have_account">Don\'t have an account? Sign Up</string>
+    
+    <!-- User Type Selection -->
+    <string name="select_user_type">How will you use BoatTaxie?</string>
+    <string name="rider">Rider</string>
+    <string name="rider_description">Book boats and taxis for your trips</string>
+    <string name="captain">Captain / Driver</string>
+    <string name="captain_description">Offer your boat or taxi services</string>
+    
+    <!-- Verification -->
+    <string name="verification_title">Verify Your Vehicle</string>
+    <string name="verification_subtitle">Upload documents to get verified - it\'s FREE!</string>
+    <string name="upload_boat_photo">Upload Boat Photo</string>
+    <string name="upload_taxi_photo">Upload Taxi Photo</string>
+    <string name="upload_registration">Upload Registration Document</string>
+    <string name="upload_license">Upload License / Permit</string>
+    <string name="upload_insurance">Upload Insurance Document</string>
+    <string name="take_photo">Take Photo</string>
+    <string name="choose_from_gallery">Choose from Gallery</string>
+    <string name="verification_pending">Verification Pending</string>
+    <string name="verification_approved">Verified</string>
+    <string name="verification_rejected">Verification Rejected</string>
+    <string name="verification_info">Your documents are being reviewed. This usually takes 24–48 hours.</string>
+    
+    <!-- Vehicle Type -->
+    <string name="boat">Boat</string>
+    <string name="taxi">Taxi</string>
+    <string name="select_vehicle_type">Select Your Vehicle Type</string>
+    
+    <!-- Home / Map -->
+    <string name="where_to">Where to?</string>
+    <string name="pickup_location">Pickup Location</string>
+    <string name="destination">Destination</string>
+    <string name="find_ride">Find Ride</string>
+    <string name="find_boat">Find Boat</string>
+    <string name="find_taxi">Find Taxi</string>
+    <string name="searching_drivers">Searching for drivers...</string>
+    <string name="searching_captains">Searching for captains...</string>
+    <string name="no_drivers_available">No drivers available nearby</string>
+    <string name="no_boats_available">No boats available nearby</string>
+    
+    <!-- Booking -->
+    <string name="book_now">Book Now</string>
+    <string name="estimated_fare">Estimated Fare</string>
+    <string name="estimated_time">Estimated Time</string>
+    <string name="trip_details">Trip Details</string>
+    <string name="driver_arriving">Driver is arriving</string>
+    <string name="captain_arriving">Captain is arriving</string>
+    <string name="trip_started">Trip Started</string>
+    <string name="trip_completed">Trip Completed</string>
+    <string name="rate_your_trip">Rate Your Trip</string>
+    <string name="leave_review">Leave a review (optional)</string>
+    
+    <!-- Subscription -->
+    <string name="subscription_title">Choose Your Plan</string>
+    <string name="subscription_subtitle">Unlock unlimited rides</string>
+    <string name="one_day">1 Day</string>
+    <string name="five_days">5 Days</string>
+    <string name="one_week">1 Week</string>
+    <string name="one_month">1 Month</string>
+    <string name="day_pass">Day Pass</string>
+    <string name="day_pass_price">$2.99/day</string>
+    <string name="week_pass">Week Pass</string>
+    <string name="week_pass_price">$14.99/week</string>
+    <string name="month_pass">Month Pass</string>
+    <string name="month_pass_price">$49.99/month</string>
+    <string name="subscribe">Subscribe</string>
+    <string name="current_plan">Current Plan</string>
+    <string name="expires_on">Expires on</string>
+    <string name="subscription_active">Subscription Active</string>
+    <string name="subscription_expired">Subscription Expired</string>
+    <string name="renew_subscription">Renew Subscription</string>
+    <string name="unlock_access">Unlock Access</string>
+    <string name="subscription_required">Subscription required to book rides</string>
+    
+    <!-- Advertisements -->
+    <string name="advertisements">Advertisements</string>
+    <string name="local_ads">Local Businesses</string>
+    <string name="post_ad">Post an Ad</string>
+    <string name="ad_title">Ad Title</string>
+    <string name="ad_description">Description</string>
+    <string name="ad_business_name">Business Name</string>
+    <string name="ad_location">Business Location</string>
+    <string name="ad_contact">Contact Info</string>
+    <string name="ad_website">Website (optional)</string>
+    <string name="ad_duration">Ad Duration</string>
+    <string name="ad_pricing">Ad Pricing</string>
+    <string name="ad_preview">Preview Ad</string>
+    <string name="publish_ad">Publish Ad</string>
+    <string name="ad_1_day">1 Day - $9.99</string>
+    <string name="ad_1_week">1 Week - $49.99</string>
+    <string name="ad_1_month">1 Month - $149.99</string>
+    <string name="featured_ad">Featured</string>
+    <string name="sponsored">Sponsored</string>
+    
+    <!-- Profile -->
+    <string name="profile">Profile</string>
+    <string name="edit_profile">Edit Profile</string>
+    <string name="my_trips">My Trips</string>
+    <string name="payment_methods">Payment Methods</string>
+    <string name="settings">Settings</string>
+    <string name="help_support">Help &amp; Support</string>
+    <string name="about">About</string>
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="terms_of_service">Terms of Service</string>
+    
+    <!-- Driver/Captain Mode -->
+    <string name="go_online">Go Online</string>
+    <string name="go_offline">Go Offline</string>
+    <string name="online_status">You\'re Online</string>
+    <string name="offline_status">You\'re Offline</string>
+    <string name="new_ride_request">New Ride Request</string>
+    <string name="accept">Accept</string>
+    <string name="decline">Decline</string>
+    <string name="earnings">Earnings</string>
+    <string name="today_earnings">Today\'s Earnings</string>
+    <string name="total_trips">Total Trips</string>
+    <string name="rating">Rating</string>
+    <string name="navigate">Navigate</string>
+    <string name="arrived">I\'ve Arrived</string>
+    <string name="start_trip">Start Trip</string>
+    <string name="end_trip">End Trip</string>
+    
+    <!-- Notifications -->
+    <string name="notification_channel_rides">Ride Notifications</string>
+    <string name="notification_channel_promo">Promotions</string>
+    
+    <!-- Errors -->
+    <string name="error_email_required">Email is required</string>
+    <string name="error_invalid_email">Please enter a valid email</string>
+    <string name="error_password_required">Password is required</string>
+    <string name="error_password_short">Password must be at least 6 characters</string>
+    <string name="error_passwords_not_match">Passwords do not match</string>
+    <string name="error_name_required">Name is required</string>
+    <string name="error_phone_required">Phone number is required</string>
+    <string name="error_location_permission">Location permission is required</string>
+    <string name="error_camera_permission">Camera permission is required</string>
+    <string name="error_network">Network error. Please try again.</string>
+    <string name="error_unknown">Something went wrong. Please try again.</string>
+    
+    <!-- Booking Screen - Additional -->
+    <string name="home">Home</string>
+    <string name="book_boat">Book Boat</string>
+    <string name="book_taxi">Book Taxi</string>
+    <string name="pickup">Pickup</string>
+    <string name="dropoff">Dropoff</string>
+    <string name="get_fare">Get Fare</string>
+    <string name="reset">Reset</string>
+    <string name="no_boats_online">No boats online now</string>
+    <string name="no_taxis_online">No taxis online now</string>
+    <string name="sending">Sending...</string>
+    <string name="send">Send</string>
+    <string name="book">Book</string>
+    <string name="trips">Trips</string>
+    <string name="ads">Ads</string>
+    <string name="driver">Driver</string>
+    <string name="how_to_book">📍 How to Book:</string>
+    <string name="how_to_book_steps">1. Tap \'Book Boat\' or \'Book Taxi\'\n2. Tap on the map for pickup point\n3. Tap again for your destination\n4. Tap \'Get Fare\' then \'Book\'</string>
+    <string name="tap_on_map_instructions">Tap on the map to set your pickup and dropoff</string>
+    <string name="see_nearby_drivers">See Nearby Drivers</string>
+    <string name="drivers_on_map">Drivers on Map</string>
+    <string name="hide_drivers">Hide Drivers</string>
+    <string name="finding">Finding...</string>
+    <string name="accepted">Accepted!</string>
+    <string name="arrived_status">Arrived!</string>
+    <string name="en_route">En Route</string>
+    <string name="select">Select</string>
+    <string name="rides">rides</string>
+    <string name="request">Request</string>
+    <string name="cancel_ride">Cancel Ride</string>
+    <string name="set_pickup">Set Pickup</string>
+    <string name="set_dropoff">Set Drop-off</string>
+    <string name="ride_complete">Ride Complete</string>
+    <string name="leave_comment">Leave a comment (optional)</string>
+    <string name="skip">Skip</string>
+    <string name="set_as_destination">Set as Destination</string>
+    <string name="accept_new_fare">Accept New Fare</string>
+    <string name="decline_cancel_ride">Decline &amp; Cancel Ride</string>
+    <string name="pending">Pending</string>
+    <string name="waiting_for_driver">Waiting for driver...</string>
+    <string name="driver_on_way">Driver on the way</string>
+    <string name="driver_arrived">Driver arrived</string>
+    <string name="in_progress">In Progress</string>
+    <string name="completed">Completed</string>
+    <string name="your_ride">Your Ride</string>
+    <string name="driver_mode">Driver Mode</string>
+    <string name="submit_rating">Submit Rating</string>
+    <string name="thank_you">Thank you!</string>
+    <string name="call">Call</string>
+    <string name="message">Message</string>
+    
+    <!-- Map markers -->
+    <string name="pickup_marker">PICKUP</string>
+    <string name="dropoff_marker">DROP OFF</string>
+    <string name="active">ACTIVE</string>
+    <string name="tap_map">TAP MAP</string>
+    
+    <!-- Booking status -->
+    <string name="searching_driver">Searching for a driver...</string>
+    <string name="confirm_booking">Confirm Booking</string>
+    <string name="no_drivers_available_message">No drivers are available right now.\nPlease try again later.</string>
+    <string name="no_boats_available_message">No boat captains are available right now.\nPlease try again later.</string>
+    <string name="no_taxis_available_message">No taxi drivers are available right now.\nPlease try again later.</string>
+    
+    <!-- Fare -->
+    <string name="tourist_rate">Tourist rate</string>
+    <string name="fare_summary">Fare Summary</string>
+    <string name="total">Total</string>
+    <string name="original">Original</string>
+    <string name="new_fare">New Fare</string>
+    <string name="fare_adjustment">Fare Adjustment</string>
+    <string name="driver_proposed_fare">The driver has proposed a different fare:</string>
+    <string name="captain_proposed_fare">The captain has proposed a different fare:</string>
+    <string name="pay_cash">Pay in CASH when you arrive</string>
+    <string name="cash_payment_driver">💵 Cash payment to driver</string>
+    <string name="cash_payment_captain">💵 Cash payment to captain</string>
+    
+    <!-- Rating -->
+    <string name="thanks_for_riding">Thanks for riding!</string>
+    <string name="arrived_destination">You\'ve arrived at your destination</string>
+    <string name="rate_driver">Rate your driver</string>
+    <string name="rate_captain">Rate your captain</string>
+    <string name="add_tip">Add a tip</string>
+    <string name="no_tip">No tip</string>
+    <string name="submit_pay_tip">Submit &amp; Pay Tip</string>
+    
+    <!-- Driver contact -->
+    <string name="cant_reach_driver">Can\'t reach your driver? Contact them above.</string>
+    <string name="cant_reach_captain">Can\'t reach your captain? Contact them above.</string>
+    
+    <!-- Ad -->
+    <string name="coupon_code">Code: %s</string>
+    
+    <!-- Recent Trips -->
+    <string name="recent_trips">Recent Trips</string>
+    <string name="see_all">See All</string>
+    <string name="trip_word">Trip</string>
+    <string name="pickup_location_text">Pickup location</string>
+    
+    <!-- Subscription Banner -->
+    <string name="subscribe_to_book">Subscribe to Book Rides</string>
+    <string name="starting_at_price">Starting at just $2.99/day</string>
+    <string name="days_remaining">%d days remaining</string>
+    <string name="subscription_expires_soon">Your subscription expires soon</string>
+    <string name="manage">Manage</string>
+    
+    <!-- Profile Screen -->
+    <string name="profile_photo">Profile photo</string>
+    <string name="user">User</string>
+    <string name="trip_history">Trip History</string>
+    <string name="view_past_rides">View your past rides</string>
+    <string name="manage_payment_options">Manage your payment options</string>
+    <string name="notifications_privacy_more">Notifications, privacy, and more</string>
+    <string name="get_help_account">Get help with your account</string>
+    <string name="about_boattaxie">About BoatTaxie</string>
+    <string name="version_terms_policies">Version, terms, and policies</string>
+    <string name="sign_out">Sign Out</string>
+    <string name="sign_out_account">Sign out of your account</string>
+    <string name="delete_account">Delete Account</string>
+    <string name="permanently_delete_account">Permanently delete your account</string>
+    <string name="delete_account_question">Delete Account?</string>
+    <string name="delete_account_warning">This will permanently delete your account and all data. This action cannot be undone.</string>
+    <string name="delete">Delete</string>
+    <string name="close">Close</string>
+    
+    <!-- Edit Profile Screen -->
+    <string name="uploading">Uploading...</string>
+    <string name="change_photo">Change Photo</string>
+    <string name="personal_information">Personal Information</string>
+    <string name="phone_contact_riders">Phone Number (for riders to contact you)</string>
+    <string name="boat_captain_license">Boat Captain License</string>
+    <string name="taxi_driver_license">Taxi Driver License</string>
+    <string name="info_shown_riders">This info is shown to riders so they can identify you</string>
+    <string name="boat_captain_license_number">Boat Captain License #</string>
+    <string name="taxi_license_number">Taxi License #</string>
+    <string name="license_placeholder">e.g., LIC-12345</string>
+    <string name="boat_information">Boat Information</string>
+    <string name="vehicle_information">Vehicle Information</string>
+    <string name="boat_model_type">Boat Model/Type</string>
+    <string name="vehicle_model">Vehicle Model</string>
+    <string name="boat_model_placeholder">e.g., Panga 25ft</string>
+    <string name="vehicle_model_placeholder">e.g., Toyota Corolla</string>
+    <string name="boat_color">Boat Color</string>
+    <string name="vehicle_color">Vehicle Color</string>
+    <string name="color_placeholder">e.g., White, Yellow</string>
+    <string name="boat_registration">Boat Registration #</string>
+    <string name="license_plate">License Plate</string>
+    <string name="boat_reg_placeholder">e.g., BOC-123</string>
+    <string name="plate_placeholder">e.g., ABC-1234</string>
+    <string name="rider_info_message">Riders will see your name, photo, license, and %s info when you accept their ride. This helps them identify you.</string>
+    <string name="boat_word">boat</string>
+    <string name="vehicle_word">vehicle</string>
+    
+    <!-- Trip History Screen -->
+    <string name="no_trips_yet">No Trips Yet</string>
+    <string name="trip_history_empty">Your trip history will appear here after your first ride.</string>
+    <string name="boat_ride">Boat Ride</string>
+    <string name="taxi_ride">Taxi Ride</string>
+    
+    <!-- Payment Methods Screen -->
+    <string name="saved_cards">Saved Cards</string>
+    <string name="no_payment_methods">No payment methods saved</string>
+    <string name="add_card">Add Card</string>
+    <string name="add_payment_method">Add Payment Method</string>
+    <string name="card_number">Card Number</string>
+    <string name="expires">Expires</string>
+    <string name="default_label">Default</string>
+    <string name="add">Add</string>
+    
+    <!-- Settings Screen -->
+    <string name="notifications">Notifications</string>
+    <string name="push_notifications">Push Notifications</string>
+    <string name="push_notifications_desc">Receive ride updates and promotions</string>
+    <string name="email_notifications">Email Notifications</string>
+    <string name="email_notifications_desc">Receive receipts and updates via email</string>
+    <string name="privacy">Privacy</string>
+    <string name="share_location">Share Location</string>
+    <string name="share_location_desc">Allow us to access your location for ride requests</string>
+    <string name="account">Account</string>
+    <string name="change_password">Change Password</string>
+    
+    <!-- Help Screen -->
+    <string name="faqs">FAQs</string>
+    <string name="find_answers">Find answers to common questions</string>
+    <string name="chat_support">Chat with Support</string>
+    <string name="whatsapp_number">WhatsApp: +507 6668-6294</string>
+    <string name="email_support">Email Support</string>
+    <string name="email_address">jerimiah@lacunabotanicals.com</string>
+    <string name="call_support">Call Support</string>
+    <string name="phone_support">+507 6668-6294</string>
+    <string name="report_safety">Report a Safety Issue</string>
+    <string name="report_safety_desc">Report unsafe behavior or incidents</string>
+    <string name="send_feedback">Send Feedback</string>
+    <string name="help_improve">Help us improve the app</string>
+    
+    <!-- FAQ Sections -->
+    <string name="getting_started">Getting Started</string>
+    <string name="for_drivers_captains">For Drivers/Captains</string>
+    <string name="during_ride">During a Ride</string>
+    <string name="payments_pricing">Payments &amp; Pricing</string>
+    <string name="business_advertising">Business Advertising</string>
+    <string name="account_safety">Account &amp; Safety</string>
+    
+    <!-- FAQ - Getting Started -->
+    <string name="faq_how_book_q">How do I book a ride?</string>
+    <string name="faq_how_book_a">1. Open the app and you\'ll see the map\n2. Long-press on the map to set your PICKUP location (green marker)\n3. Long-press again to set your DROP OFF location (orange marker)\n4. Select your vehicle type (Boat or Taxi)\n5. Enter the number of passengers\n6. Tap \'Request Ride\' and wait for a driver to accept</string>
+    <string name="faq_switch_vehicle_q">How do I switch between Boat and Taxi?</string>
+    <string name="faq_switch_vehicle_a">On the booking screen, you\'ll see vehicle type buttons (Boat 🚤 or Taxi 🚕). Tap on the one you want. Boats are for water transportation, Taxis are for land transportation.</string>
+    <string name="faq_see_drivers_q">How do I see nearby drivers?</string>
+    <string name="faq_see_drivers_a">Tap the \'See Nearby Drivers\' button on the booking screen. This will show you all available drivers/captains on the map so you can see who\'s close to your location.</string>
+    
+    <!-- FAQ - For Drivers -->
+    <string name="faq_become_driver_q">How do I become a driver?</string>
+    <string name="faq_become_driver_a">1. Go to Profile → Become a Driver/Captain\n2. Fill in your driver information:\n   • Upload a clear photo\n   • Enter your license plate number\n   • Upload your driver\'s license (front and back)\n   • Choose your vehicle type (Boat, Taxi, or Both)\n3. Wait for approval (usually within 24-48 hours)\n4. Once approved, you can go online and start accepting rides!</string>
+    <string name="faq_go_online_q">How do I go online as a driver?</string>
+    <string name="faq_go_online_a">1. Open the app\n2. Tap the navigation icon in the top right (the steering wheel)\n3. This takes you to Driver Mode\n4. Tap \'Go Online\' to start receiving ride requests\n5. When a request comes in, you\'ll see the pickup/dropoff locations and passenger count\n6. Tap \'Accept Ride\' to accept</string>
+    <string name="faq_both_vehicles_q">I have both a boat and taxi. How do I switch?</string>
+    <string name="faq_both_vehicles_a">If you registered as having both vehicle types:\n1. Go to Driver Mode\n2. Look for the vehicle switcher at the top\n3. Tap to switch between your Boat and Taxi\n4. You\'ll only see ride requests for your currently selected vehicle type</string>
+    <string name="faq_contact_rider_q">How do I contact the rider?</string>
+    <string name="faq_contact_rider_a">Once you accept a ride:\n1. You\'ll see the rider\'s information\n2. Tap the phone icon to call them\n3. Tap the message icon to send an SMS\n4. Use this to coordinate pickup details</string>
+    
+    <!-- FAQ - During Ride -->
+    <string name="faq_how_ride_works_q">How does the ride work?</string>
+    <string name="faq_how_ride_works_a">1. Driver accepts your request\n2. Driver navigates to your pickup location\n3. When driver arrives, they mark \'Arrived\'\n4. You board the vehicle\n5. Driver starts the trip\n6. Driver navigates to drop off location\n7. When you arrive, driver completes the trip\n8. You can rate and tip the driver</string>
+    <string name="faq_contact_driver_q">How do I contact my driver?</string>
+    <string name="faq_contact_driver_a">Once a driver accepts your ride:\n1. You\'ll see their name, photo, rating, and vehicle info\n2. Tap the phone icon to call them\n3. Tap the message icon to text them\n4. This helps coordinate the pickup</string>
+    <string name="faq_driver_not_showing_q">What if my driver isn\'t showing up?</string>
+    <string name="faq_driver_not_showing_a">If your driver is taking too long:\n1. Try calling or texting them using the contact buttons\n2. If no response, you can cancel the ride\n3. Contact support if you have ongoing issues</string>
+    
+    <!-- FAQ - Payments -->
+    <string name="faq_fare_calculated_q">How is the fare calculated?</string>
+    <string name="faq_fare_calculated_a">Fares are based on:\n• Distance between pickup and drop off\n• Vehicle type (Boats may have different rates)\n• Number of passengers\n• The driver sets the final price, which you see before confirming</string>
+    <string name="faq_how_pay_q">How do I pay?</string>
+    <string name="faq_how_pay_a">Payment is handled directly between you and the driver. Cash is the most common method. Always confirm the fare with your driver before starting the ride.</string>
+    <string name="faq_tip_q">Can I tip my driver?</string>
+    <string name="faq_tip_a">Yes! After your ride is complete, you can add a tip. Tips go directly to your driver/captain and are greatly appreciated for good service.</string>
+    
+    <!-- FAQ - Business -->
+    <string name="faq_advertise_q">How do I advertise my business?</string>
+    <string name="faq_advertise_a">1. Go to Profile → Advertise your Business\n2. Fill in your business details:\n   • Business name and description\n   • Category\n   • Location (shown on the map)\n   • Contact information\n   • Upload photos\n3. Optionally add a coupon to attract customers\n4. Choose an advertising plan and duration\n5. Your business will appear on the map for riders to see!</string>
+    <string name="faq_coupons_q">How do coupons work?</string>
+    <string name="faq_coupons_a">When creating an ad, you can add a coupon:\n1. Enable \'Add Coupon\'\n2. Enter the discount (e.g., \'10% OFF\' or \'$5 OFF\')\n3. Riders will see a coupon icon on your map marker\n4. They can tap to see the coupon code\n5. Show the code at your business to redeem</string>
+    
+    <!-- FAQ - Account & Safety -->
+    <string name="faq_update_profile_q">How do I update my profile?</string>
+    <string name="faq_update_profile_a">Go to Profile → Edit Profile to update:\n• Your name\n• Phone number\n• Profile photo\n• Emergency contact information</string>
+    <string name="faq_info_safe_q">Is my information safe?</string>
+    <string name="faq_info_safe_a">Yes! We take your privacy seriously:\n• Your exact location is only shared with your driver during a ride\n• Personal information is encrypted\n• We never sell your data to third parties</string>
+    <string name="faq_safety_concern_q">What if I have a safety concern?</string>
+    <string name="faq_safety_concern_a">1. Use the \'Report a Safety Issue\' option in Help &amp; Support\n2. Call our support line: +507 6668-6294\n3. In an emergency, always call local emergency services first</string>
+    
+    <!-- About Screen -->
+    <string name="version">Version 1.0.0</string>
+    <string name="tagline">Your ride, your way.\nBoats and taxis at your fingertips.</string>
+    <string name="open_source_licenses">Open Source Licenses</string>
+    <string name="copyright">© 2024 BoatTaxie. All rights reserved.</string>
+    
+    <!-- New UI Elements -->
+    <string name="terms_conditions">Terms &amp; Conditions</string>
+    <string name="i_accept">I Accept</string>
+    <string name="i_understand">I Understand</string>
+    <string name="search">Search</string>
+    <string name="search_locations">Search locations...</string>
+    <string name="popular_destinations">Popular Destinations</string>
+    <string name="map_button">Map</string>
+    <string name="subscribe_button">Subscribe</string>
+    <string name="pay_credit_card">Pay with Credit Card</string>
+    <string name="reopen_payment">Reopen Payment Page</string>
+    <string name="payment_opened">Payment page opened in browser</string>
+    <string name="confirm_payment">Confirm Payment</string>
+    <string name="completed_payment">I\'ve Completed Payment</string>
+    <string name="watch_video">Watch Video</string>
+    <string name="tap_to_watch">Tap to watch video</string>
+    
+    <!-- Ad Impressions -->
+    <string name="ad_views">%d views</string>
+    <string name="ad_being_viewed">Your ad is being viewed by %d drivers and riders</string>
+    <string name="ad_on_phones">%d people have your ad on their phone</string>
+    <string name="impressions">Impressions</string>
+    <string name="clicks">Clicks</string>
+</resources>
