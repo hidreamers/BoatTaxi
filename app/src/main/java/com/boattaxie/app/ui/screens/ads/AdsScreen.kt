@@ -1742,10 +1742,10 @@ fun CreateAdScreen(
                         Log.d("AdsScreen", "Enabled: ${businessName.isNotBlank() && title.isNotBlank() && description.isNotBlank()}")
                         scope.launch {
                             activity?.let {
-                                Log.d("AdsScreen", "Launching createAdCheckoutSession")
+                                Log.d("AdsScreen", "Launching createAdCheckoutSession with days=${selectedPlan.days}")
                                 val success = viewModel.paymentManager.createAdCheckoutSession(
                                     activity = it,
-                                    durationDays = selectedPlan.displayName.split(" ")[0].toIntOrNull() ?: 1,
+                                    durationDays = selectedPlan.days,
                                     isFeatured = isFeatured,
                                     businessName = businessName,
                                     title = title,
