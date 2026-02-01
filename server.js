@@ -17,9 +17,9 @@ const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 
 // Initialize Firebase Admin with environment variables
 let firebaseConfig;
-// Check for Railway environment variables (try multiple possible names)
-const privateKey = process.env.FIREBASE_PRIVATE_KEY || process.env['PRIVATE KEY'] || process.env.PRIVATE_KEY;
-const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || process.env.FIREBASE_SERVICE_ACCOUNT_EMAIL;
+// Check for Railway environment variables
+const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 
 if (privateKey && clientEmail) {
   // Use environment variables (for Railway)
