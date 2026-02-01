@@ -6,6 +6,7 @@ backend/node_modules/
 backend/.env
 backend/firebase-service-account.json
 backup/
+gradle-temp/
 *.apk
 *.aab
 .DS_Store
