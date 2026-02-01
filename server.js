@@ -18,16 +18,24 @@ const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 // Initialize Firebase Admin with environment variables
 let firebaseConfig;
 // Check for Railway environment variables
-const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 
-if (privateKey && clientEmail) {
+if (privateKeyRaw && clientEmail) {
+  // Handle both escaped \n and actual newlines
+  let privateKey = privateKeyRaw;
+  if (privateKeyRaw.includes('\\n')) {
+    privateKey = privateKeyRaw.replace(/\\n/g, '\n');
+  }
+  console.log('Private key starts with:', privateKey.substring(0, 30));
+  console.log('Private key length:', privateKey.length);
+  
   // Use environment variables (for Railway)
   firebaseConfig = {
     credential: admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID || 'boat-taxie',
       clientEmail: clientEmail,
-      privateKey: privateKey.replace(/\\n/g, '\n')
+      privateKey: privateKey
     })
   };
   console.log('Using Firebase credentials from environment variables');
