@@ -400,7 +400,7 @@ app.get('/api/health', (req, res) => {
 // Create Ad Checkout Session endpoint
 app.post('/api/create-ad-checkout-session', async (req, res) => {
   try {
-    const { durationDays, isFeatured, businessName, title, description, imageUri, logoUri, youtubeUrl, phone, email, website, category, location } = req.body;
+    const { durationDays, isFeatured, businessName, title, description, imageUri, logoUri, youtubeUrl, phone, email, website, category, location, userId } = req.body;
 
     const price = AD_PRICES[isFeatured ? 'featured' : 'standard'][durationDays];
 
@@ -423,6 +423,7 @@ app.post('/api/create-ad-checkout-session', async (req, res) => {
       durationDays: durationDays || 7,
       isFeatured: isFeatured || false,
       location: location || '',
+      userId: userId || '',
       status: 'draft',
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     };
