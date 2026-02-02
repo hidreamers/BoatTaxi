@@ -1,29 +1,32 @@
 package com.boattaxie.app.ui.screens.admin
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.boattaxie.app.data.model.VerificationSubmission
 import com.boattaxie.app.data.model.VerificationStatus
 import com.boattaxie.app.data.model.VehicleType
+import com.boattaxie.app.data.model.DocumentType
 import com.boattaxie.app.ui.theme.*
-
-// Admin password - change this to your secure password
-private const val ADMIN_PASSWORD = "BoatTaxie2025!"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,109 +36,6 @@ fun AdminVerificationScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    
-    // Password protection state
-    var isAuthenticated by remember { mutableStateOf(false) }
-    var passwordInput by remember { mutableStateOf("") }
-    var passwordError by remember { mutableStateOf(false) }
-    var showPassword by remember { mutableStateOf(false) }
-    
-    // Show password screen if not authenticated
-    if (!isAuthenticated) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("Admin Access") },
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(Icons.Default.ArrowBack, "Back")
-                        }
-                    }
-                )
-            }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    Icons.Default.Lock,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = Primary
-                )
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Text(
-                    text = "Admin Authentication",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                Text(
-                    text = "Enter admin password to continue",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
-                )
-                
-                Spacer(modifier = Modifier.height(32.dp))
-                
-                OutlinedTextField(
-                    value = passwordInput,
-                    onValueChange = { 
-                        passwordInput = it
-                        passwordError = false
-                    },
-                    label = { Text("Password") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    isError = passwordError,
-                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                    leadingIcon = {
-                        Icon(Icons.Default.Lock, null)
-                    },
-                    trailingIcon = {
-                        IconButton(onClick = { showPassword = !showPassword }) {
-                            Icon(
-                                if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                if (showPassword) "Hide password" else "Show password"
-                            )
-                        }
-                    },
-                    supportingText = if (passwordError) {
-                        { Text("Incorrect password", color = Color(0xFFD32F2F)) }
-                    } else null
-                )
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Button(
-                    onClick = {
-                        if (passwordInput == ADMIN_PASSWORD) {
-                            isAuthenticated = true
-                            viewModel.loadSubmissions()
-                        } else {
-                            passwordError = true
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    enabled = passwordInput.isNotBlank()
-                ) {
-                    Icon(Icons.Default.Login, null, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Access Admin Panel", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-        return
-    }
     
     // Load submissions on first composition
     LaunchedEffect(Unit) {
@@ -298,6 +198,7 @@ private fun VerificationCard(
 ) {
     var showRejectDialog by remember { mutableStateOf(false) }
     var rejectReason by remember { mutableStateOf("") }
+    var selectedImageUrl by remember { mutableStateOf<String?>(null) }
     
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -324,7 +225,7 @@ private fun VerificationCard(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "Driver #${submission.userId.take(8)}",
+                            text = submission.userName.ifBlank { "Driver #${submission.userId.take(8)}" },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -358,29 +259,91 @@ private fun VerificationCard(
             }
             
             Spacer(modifier = Modifier.height(12.dp))
+            
+            // Driver contact info
+            if (!submission.userEmail.isNullOrBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Email, null, tint = Primary, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = submission.userEmail, style = MaterialTheme.typography.bodySmall, color = Primary)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+            
+            if (!submission.phoneNumber.isNullOrBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Phone, null, tint = Success, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = submission.phoneNumber, style = MaterialTheme.typography.bodySmall, color = Success)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+            
             Divider()
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Documents count
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Description,
-                    null,
-                    tint = TextSecondary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+            // Document thumbnails - tap to view full size
+            Text(
+                text = "📄 Documents (tap to view)",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Show document images in a horizontal scroll
+            val documentUrls = submission.documentUrls ?: submission.documents.map { it.documentUrl }
+            if (documentUrls.isNotEmpty()) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(documentUrls.size) { index ->
+                        val url = documentUrls[index]
+                        val docType = submission.documents.getOrNull(index)?.documentType
+                        
+                        Card(
+                            onClick = { selectedImageUrl = url },
+                            modifier = Modifier.size(100.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                AsyncImage(
+                                    model = url,
+                                    contentDescription = docType?.name ?: "Document $index",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                                // Document type label
+                                Surface(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .fillMaxWidth(),
+                                    color = Color.Black.copy(alpha = 0.7f)
+                                ) {
+                                    Text(
+                                        text = docType?.name?.replace("_", " ") ?: "Doc ${index + 1}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
                 Text(
-                    text = "${submission.documents.size} documents submitted",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "No documents uploaded",
+                    style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
             }
             
+            Spacer(modifier = Modifier.height(12.dp))
+            
             // Submitted time
-            Spacer(modifier = Modifier.height(4.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -485,6 +448,45 @@ private fun VerificationCard(
                 }
             }
         )
+    }
+    
+    // Full-screen image viewer dialog
+    if (selectedImageUrl != null) {
+        Dialog(onDismissRequest = { selectedImageUrl = null }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { selectedImageUrl = null }
+            ) {
+                AsyncImage(
+                    model = selectedImageUrl,
+                    contentDescription = "Document",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.Center),
+                    contentScale = ContentScale.Fit
+                )
+                // Close button
+                IconButton(
+                    onClick = { selectedImageUrl = null },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = Color.Black.copy(alpha = 0.6f)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.White,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

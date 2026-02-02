@@ -30,29 +30,21 @@ class VerificationRepository @Inject constructor(
         get() = auth.currentUser?.uid
     
     /**
-     * Save document image locally
+     * Upload image to Firebase Storage and return the download URL
      */
-    private fun saveDocumentLocally(imageUri: Uri, documentType: DocumentType, uid: String): String? {
-        return try {
-            val inputStream = context.contentResolver.openInputStream(imageUri) ?: return null
-            val docsDir = File(context.filesDir, "verification_docs")
-            if (!docsDir.exists()) docsDir.mkdirs()
-            
-            val imageFile = File(docsDir, "${uid}_${documentType.name}_${System.currentTimeMillis()}.jpg")
-            imageFile.outputStream().use { output ->
-                inputStream.copyTo(output)
-            }
-            inputStream.close()
-            
-            imageFile.absolutePath
-        } catch (e: Exception) {
-            android.util.Log.e("VerificationRepo", "Failed to save document locally: ${e.message}")
-            null
-        }
+    private suspend fun uploadToFirebaseStorage(imageUri: Uri, documentType: DocumentType, uid: String): String {
+        val fileName = "${uid}_${documentType.name}_${System.currentTimeMillis()}.jpg"
+        val storageRef = storage.reference.child("verification_documents/$uid/$fileName")
+        
+        // Upload the file
+        storageRef.putFile(imageUri).await()
+        
+        // Get the download URL
+        return storageRef.downloadUrl.await().toString()
     }
     
     /**
-     * Upload a verification document image - saves locally instead of Firebase Storage
+     * Upload a verification document image to Firebase Storage
      */
     suspend fun uploadDocument(
         imageUri: Uri,
@@ -61,9 +53,8 @@ class VerificationRepository @Inject constructor(
     ): Result<VerificationDocument> = runCatching {
         val uid = userId ?: throw Exception("User not logged in")
         
-        // Save image locally instead of Firebase Storage
-        val localPath = saveDocumentLocally(imageUri, documentType, uid)
-            ?: throw Exception("Failed to save document locally")
+        // Upload to Firebase Storage and get download URL
+        val downloadUrl = uploadToFirebaseStorage(imageUri, documentType, uid)
         
         // Create verification document record
         val document = VerificationDocument(
@@ -71,7 +62,7 @@ class VerificationRepository @Inject constructor(
             userId = uid,
             vehicleType = vehicleType,
             documentType = documentType,
-            documentUrl = localPath, // Store local file path
+            documentUrl = downloadUrl, // Store Firebase Storage URL
             status = VerificationStatus.PENDING
         )
         
@@ -142,16 +133,26 @@ class VerificationRepository @Inject constructor(
      */
     suspend fun submitVerification(
         vehicleType: VehicleType,
-        documents: List<VerificationDocument>
+        documents: List<VerificationDocument>,
+        phoneNumber: String? = null
     ): Result<VerificationSubmission> = runCatching {
         val uid = userId ?: throw Exception("User not logged in")
         val userName = auth.currentUser?.displayName ?: auth.currentUser?.email ?: "Unknown"
+        val userEmail = auth.currentUser?.email ?: ""
+        
+        // Extract document URLs for easy viewing by admin
+        val documentUrls = documents.map { it.documentUrl }
         
         val submission = VerificationSubmission(
             id = UUID.randomUUID().toString(),
             userId = uid,
+            userEmail = userEmail,
+            userName = userName,
+            phoneNumber = phoneNumber,
             vehicleType = vehicleType,
             documents = documents,
+            documentUrls = documentUrls,
+            documentsCount = documents.size,
             overallStatus = VerificationStatus.PENDING // Requires admin approval
         )
         
@@ -166,16 +167,20 @@ class VerificationRepository @Inject constructor(
         val userType = if (vehicleType == VehicleType.TAXI) UserType.DRIVER else UserType.CAPTAIN
         
         // Update user verification status to PENDING - admin will approve
+        // Also save phone number if provided
+        val updateMap = mutableMapOf<String, Any>(
+            "verificationStatus" to VerificationStatus.PENDING,
+            "isVerified" to false,
+            "vehicleType" to vehicleType,
+            "userType" to userType
+        )
+        if (!phoneNumber.isNullOrBlank()) {
+            updateMap["phoneNumber"] = phoneNumber
+        }
+        
         firestore.collection("users")
             .document(uid)
-            .update(
-                mapOf(
-                    "verificationStatus" to VerificationStatus.PENDING,
-                    "isVerified" to false,
-                    "vehicleType" to vehicleType,
-                    "userType" to userType
-                )
-            )
+            .update(updateMap)
             .await()
         
         // Notify admin about new verification request

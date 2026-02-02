@@ -45,6 +45,7 @@ fun VerificationScreen(
     var showImageSourceDialog by remember { mutableStateOf(false) }
     var selectedDocumentType by remember { mutableStateOf<DocumentType?>(null) }
     var tempImageUri by remember { mutableStateOf<Uri?>(null) }
+    var phoneNumber by remember { mutableStateOf("") }
     
     // Initialize vehicle type
     LaunchedEffect(vehicleType) {
@@ -230,9 +231,34 @@ fun VerificationScreen(
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 
+                // Phone number field for contact
+                Text(
+                    text = "Contact Phone Number",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "We'll use this to notify you about your verification status",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = phoneNumber,
+                    onValueChange = { phoneNumber = it },
+                    label = { Text("Phone Number") },
+                    placeholder = { Text("+507 6XXX-XXXX") },
+                    leadingIcon = { Icon(Icons.Default.Phone, null) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
                 PrimaryButton(
                     text = "Submit for Verification",
-                    onClick = { viewModel.submitVerification() },
+                    onClick = { viewModel.submitVerification(phoneNumber.ifBlank { null }) },
                     enabled = uiState.canSubmit && !uiState.isLoading,
                     isLoading = uiState.isLoading
                 )

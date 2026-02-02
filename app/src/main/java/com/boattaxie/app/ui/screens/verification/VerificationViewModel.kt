@@ -154,7 +154,7 @@ class VerificationViewModel @Inject constructor(
         }
     }
     
-    fun submitVerification() {
+    fun submitVerification(phoneNumber: String? = null) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             
@@ -165,7 +165,8 @@ class VerificationViewModel @Inject constructor(
             
             val result = verificationRepository.submitVerification(
                 vehicleType = currentVehicleType,
-                documents = documents
+                documents = documents,
+                phoneNumber = phoneNumber
             )
             
             result.fold(

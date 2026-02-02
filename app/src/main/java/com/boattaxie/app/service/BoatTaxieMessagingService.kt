@@ -30,6 +30,7 @@ class BoatTaxieMessagingService : FirebaseMessagingService() {
         const val CHANNEL_ID_RIDE = "ride_notifications"
         const val CHANNEL_ID_PROMO = "promo_notifications"
         const val CHANNEL_ID_GENERAL = "general_notifications"
+        const val CHANNEL_ID_VERIFICATION = "verification"
         
         // Notification types
         const val TYPE_RIDE_REQUEST = "ride_request"
@@ -40,6 +41,9 @@ class BoatTaxieMessagingService : FirebaseMessagingService() {
         const val TYPE_RIDE_CANCELLED = "ride_cancelled"
         const val TYPE_PROMOTION = "promotion"
         const val TYPE_GENERAL = "general"
+        const val TYPE_DRIVER_VERIFICATION = "driver_verification"
+        const val TYPE_VERIFICATION_APPROVED = "verification_approved"
+        const val TYPE_VERIFICATION_REJECTED = "verification_rejected"
     }
     
     override fun onCreate() {
@@ -252,8 +256,19 @@ class BoatTaxieMessagingService : FirebaseMessagingService() {
             description = "General notifications"
         }
         
+        // Verification notifications channel (for admin and driver updates)
+        val verificationChannel = NotificationChannel(
+            CHANNEL_ID_VERIFICATION,
+            "Driver Verifications",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "New driver verification requests and approvals"
+            enableVibration(true)
+            enableLights(true)
+        }
+        
         notificationManager.createNotificationChannels(
-            listOf(rideChannel, promoChannel, generalChannel)
+            listOf(rideChannel, promoChannel, generalChannel, verificationChannel)
         )
     }
 }
