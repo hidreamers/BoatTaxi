@@ -421,6 +421,221 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Admin user ID - your account for receiving verification notifications
+const ADMIN_USER_ID = process.env.ADMIN_USER_ID || 'jerimiah_admin';
+const ADMIN_EMAIL = 'jerimiah@lacunabotanicals.com';
+
+// Notify admin about new driver verification request
+app.post('/api/notify-admin-verification', async (req, res) => {
+  try {
+    const { submissionId, userName, vehicleType } = req.body;
+    
+    console.log(`New verification request: ${submissionId} from ${userName} for ${vehicleType}`);
+    
+    // Get admin user(s) to send push notification
+    // Find users with admin flag or specific admin email
+    const adminUsersSnapshot = await db.collection('users')
+      .where('email', '==', ADMIN_EMAIL)
+      .limit(1)
+      .get();
+    
+    if (adminUsersSnapshot.empty) {
+      console.log('No admin user found with email:', ADMIN_EMAIL);
+      return res.json({ success: true, message: 'No admin found to notify' });
+    }
+    
+    const adminDoc = adminUsersSnapshot.docs[0];
+    const adminData = adminDoc.data();
+    const fcmToken = adminData.fcmToken;
+    
+    if (!fcmToken) {
+      console.log('Admin user has no FCM token');
+      return res.json({ success: true, message: 'Admin has no FCM token' });
+    }
+    
+    // Send push notification to admin
+    const message = {
+      token: fcmToken,
+      notification: {
+        title: '🚗 New Driver Verification',
+        body: `${userName} wants to become a ${vehicleType} driver. Tap to review.`
+      },
+      data: {
+        type: 'driver_verification',
+        submissionId: submissionId,
+        userName: userName,
+        vehicleType: vehicleType
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'verification',
+          priority: 'high',
+          defaultSound: true
+        }
+      }
+    };
+    
+    const response = await admin.messaging().send(message);
+    console.log('Push notification sent to admin:', response);
+    
+    res.json({ success: true, messageId: response });
+  } catch (error) {
+    console.error('Error notifying admin:', error);
+    res.status(500).json({ error: 'Failed to notify admin', details: error.message });
+  }
+});
+
+// Get pending verification submissions (for admin)
+app.get('/api/admin/verifications/pending', async (req, res) => {
+  try {
+    const snapshot = await db.collection('verification_submissions')
+      .where('overallStatus', '==', 'PENDING')
+      .orderBy('submittedAt', 'desc')
+      .limit(50)
+      .get();
+    
+    const submissions = [];
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      
+      // Get user info
+      const userDoc = await db.collection('users').doc(data.userId).get();
+      const userData = userDoc.exists ? userDoc.data() : {};
+      
+      submissions.push({
+        id: doc.id,
+        ...data,
+        userName: userData.fullName || userData.email || 'Unknown',
+        userEmail: userData.email || '',
+        userPhone: userData.phoneNumber || ''
+      });
+    }
+    
+    res.json({ submissions });
+  } catch (error) {
+    console.error('Error fetching pending verifications:', error);
+    res.status(500).json({ error: 'Failed to fetch verifications' });
+  }
+});
+
+// Approve driver verification (for admin)
+app.post('/api/admin/verifications/:submissionId/approve', async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+    const { adminNotes } = req.body;
+    
+    // Get submission
+    const submissionDoc = await db.collection('verification_submissions').doc(submissionId).get();
+    if (!submissionDoc.exists) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+    
+    const submission = submissionDoc.data();
+    const userId = submission.userId;
+    const vehicleType = submission.vehicleType;
+    
+    // Update submission status
+    await db.collection('verification_submissions').doc(submissionId).update({
+      overallStatus: 'APPROVED',
+      status: 'approved',
+      reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+      adminNotes: adminNotes || 'Approved'
+    });
+    
+    // Update user - mark as verified driver
+    const userType = vehicleType === 'TAXI' ? 'driver' : 'captain';
+    await db.collection('users').doc(userId).update({
+      verificationStatus: 'approved',
+      isVerified: true,
+      isLocalResident: true,
+      canBeDriver: true,
+      userType: userType,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // Send push notification to driver that they're approved
+    const userDoc = await db.collection('users').doc(userId).get();
+    const userData = userDoc.data();
+    if (userData && userData.fcmToken) {
+      const message = {
+        token: userData.fcmToken,
+        notification: {
+          title: '✅ Verification Approved!',
+          body: `Congratulations! You're now a verified ${vehicleType} driver. Start accepting rides!`
+        },
+        data: {
+          type: 'verification_approved',
+          vehicleType: vehicleType
+        }
+      };
+      await admin.messaging().send(message);
+      console.log('Approval notification sent to driver');
+    }
+    
+    res.json({ success: true, message: 'Driver approved successfully' });
+  } catch (error) {
+    console.error('Error approving verification:', error);
+    res.status(500).json({ error: 'Failed to approve verification' });
+  }
+});
+
+// Reject driver verification (for admin)
+app.post('/api/admin/verifications/:submissionId/reject', async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+    const { reason } = req.body;
+    
+    // Get submission
+    const submissionDoc = await db.collection('verification_submissions').doc(submissionId).get();
+    if (!submissionDoc.exists) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+    
+    const submission = submissionDoc.data();
+    const userId = submission.userId;
+    
+    // Update submission status
+    await db.collection('verification_submissions').doc(submissionId).update({
+      overallStatus: 'REJECTED',
+      status: 'rejected',
+      reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+      adminNotes: reason || 'Rejected'
+    });
+    
+    // Update user
+    await db.collection('users').doc(userId).update({
+      verificationStatus: 'rejected',
+      isVerified: false,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // Send push notification to driver that they're rejected
+    const userDoc = await db.collection('users').doc(userId).get();
+    const userData = userDoc.data();
+    if (userData && userData.fcmToken) {
+      const message = {
+        token: userData.fcmToken,
+        notification: {
+          title: '❌ Verification Not Approved',
+          body: reason || 'Your driver verification was not approved. Please check your documents and try again.'
+        },
+        data: {
+          type: 'verification_rejected',
+          reason: reason || 'Documents not accepted'
+        }
+      };
+      await admin.messaging().send(message);
+      console.log('Rejection notification sent to driver');
+    }
+    
+    res.json({ success: true, message: 'Driver rejected' });
+  } catch (error) {
+    console.error('Error rejecting verification:', error);
+    res.status(500).json({ error: 'Failed to reject verification' });
+  }
+});
+
 // Create Ad Checkout Session endpoint
 app.post('/api/create-ad-checkout-session', async (req, res) => {
   try {

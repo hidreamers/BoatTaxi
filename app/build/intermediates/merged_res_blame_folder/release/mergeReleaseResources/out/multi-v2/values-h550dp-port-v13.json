@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.boattaxie.app-mergeReleaseResources-103:/values-h550dp-port-v13/values-h550dp-port-v13.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\User\\.gradle\\caches\\8.14.3\\transforms\\dab7d4e144455ee10716cb420ffadf09\\transformed\\material-1.8.0\\res\\values-h550dp-port-v13\\values-h550dp-port-v13.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "76",
+                        "endOffsets": "127"
+                    }
+                }
+            ]
+        }
+    ]
+}

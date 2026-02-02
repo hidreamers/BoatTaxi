@@ -1,0 +1,588 @@
+const express = require('express');
+const cors = require('cors');
+const stripe = require('stripe');
+const admin = require('firebase-admin');
+require('dotenv').config();
+
+// Schedule ad expiration to run every hour
+function startAdExpirationScheduler() {
+  // Run every hour (3600000 milliseconds)
+  setInterval(async () => {
+    try {
+      const count = await expireOldAds();
+      console.log(`Scheduled: Expired ${count} ads at ${new Date().toISOString()}`);
+    } catch (err) {
+      console.error('Scheduled ad expiration failed:', err);
+    }
+  }, 60 * 60 * 1000); // 1 hour
+  
+  console.log('Ad expiration scheduler started (runs every hour)');
+}
+
+console.log('Environment check:');
+console.log('STRIPE_SECRET_KEY exists:', !!process.env.STRIPE_SECRET_KEY);
+console.log('STRIPE_SECRET_KEY starts with:', process.env.STRIPE_SECRET_KEY?.substring(0, 10));
+console.log('FIREBASE_PROJECT_ID exists:', !!process.env.FIREBASE_PROJECT_ID);
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+// Initialize Stripe with your secret key
+const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
+
+// Initialize Firebase Admin with environment variables
+let firebaseConfig;
+// Check for Railway environment variables
+const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+
+if (privateKeyRaw && clientEmail) {
+  // Handle both escaped \n and actual newlines
+  let privateKey = privateKeyRaw;
+  if (privateKeyRaw.includes('\\n')) {
+    privateKey = privateKeyRaw.replace(/\\n/g, '\n');
+  }
+  console.log('Private key starts with:', privateKey.substring(0, 30));
+  console.log('Private key length:', privateKey.length);
+  
+  // Use environment variables (for Railway)
+  firebaseConfig = {
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID || 'boat-taxie',
+      clientEmail: clientEmail,
+      privateKey: privateKey
+    })
+  };
+  console.log('Using Firebase credentials from environment variables');
+  console.log('Client email:', clientEmail);
+} else {
+  // Fallback to JSON file (for local development)
+  const serviceAccount = require('./firebase-service-account.json');
+  firebaseConfig = {
+    credential: admin.credential.cert(serviceAccount)
+  };
+  console.log('Using Firebase credentials from JSON file');
+}
+
+admin.initializeApp(firebaseConfig);
+
+const db = admin.firestore();
+
+// Subscription plans mapping
+const SUBSCRIPTION_PLANS = {
+  'DAY_PASS': { days: 1, name: 'Day Pass', price: 199 },
+  'THREE_DAY_PASS': { days: 3, name: '3 Day Pass', price: 499 },
+  'FIVE_DAY_PASS': { days: 5, name: '5 Day Pass', price: 799 },
+  'WEEK_PASS': { days: 7, name: 'Week Pass', price: 999 },
+  'TWO_WEEK_PASS': { days: 14, name: '2 Week Pass', price: 1799 },
+  'MONTH_PASS': { days: 30, name: 'Month Pass', price: 2999 }
+};
+
+// Ad pricing in cents (matching your Stripe payment links)
+const AD_PRICES = {
+  standard: {
+    1: 499,    // $4.99
+    3: 999,    // $9.99
+    7: 1999,   // $19.99
+    14: 2999,  // $29.99
+    30: 4999   // $49.99
+  },
+  featured: {
+    1: 999,    // $9.99
+    3: 1999,   // $19.99
+    7: 3499,   // $34.99
+    14: 5499,  // $54.99
+    30: 8999   // $89.99
+  }
+};
+
+// Function to activate an ad after payment
+async function activateAd(adId, session) {
+  try {
+    // Determine which collection the ad is in from session metadata
+    let collection = session.metadata?.collection || 'ads';
+    let durationDays = parseInt(session.metadata?.durationDays) || 7;
+    
+    // Try to get the ad document
+    let adDoc = await db.collection(collection).doc(adId).get();
+    
+    // If not found in the specified collection, try the other one
+    if (!adDoc.exists) {
+      const otherCollection = collection === 'ads' ? 'advertisements' : 'ads';
+      adDoc = await db.collection(otherCollection).doc(adId).get();
+      if (adDoc.exists) {
+        collection = otherCollection;
+        console.log(`Ad ${adId} found in ${collection} collection instead`);
+      } else {
+        throw new Error(`Ad ${adId} not found in either collection`);
+      }
+    }
+    
+    const adData = adDoc.data();
+    // Use durationDays from session metadata, falling back to ad data, then to 7
+    if (!durationDays || isNaN(durationDays)) {
+      durationDays = adData.durationDays || 7;
+    }
+    
+    // Calculate start and end dates
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setDate(startDate.getDate() + durationDays);
+    
+    // Update the ad with active status and dates
+    const updateData = {
+      status: 'ACTIVE',  // Use uppercase to match app's enum
+      startDate: admin.firestore.Timestamp.fromDate(startDate),
+      endDate: admin.firestore.Timestamp.fromDate(endDate),
+      activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      paymentId: session.payment_intent || session.id,
+      stripeSessionId: session.id,
+      amountPaid: session.amount_total / 100,
+      paymentStatus: 'COMPLETED',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+    
+    // For advertisements collection (AI-generated), also set coupon expiry
+    if (collection === 'advertisements' && adData.hasCoupon) {
+      updateData.couponExpiresAt = admin.firestore.Timestamp.fromDate(endDate);
+    }
+    
+    await db.collection(collection).doc(adId).update(updateData);
+    
+    console.log(`Ad ${adId} in ${collection} activated until ${endDate.toISOString()}`);
+    return true;
+  } catch (error) {
+    console.error(`Error activating ad ${adId}:`, error);
+    throw error;
+  }
+}
+
+// Function to check and expire old ads
+async function expireOldAds() {
+  try {
+    const now = admin.firestore.Timestamp.now();
+    
+    // Find all active ads that have expired
+    const expiredAdsSnapshot = await db.collection('ads')
+      .where('status', '==', 'active')
+      .where('endDate', '<=', now)
+      .get();
+    
+    const batch = db.batch();
+    let expiredCount = 0;
+    
+    expiredAdsSnapshot.forEach(doc => {
+      batch.update(doc.ref, {
+        status: 'expired',
+        expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      expiredCount++;
+    });
+    
+    if (expiredCount > 0) {
+      await batch.commit();
+      console.log(`Expired ${expiredCount} ads`);
+    }
+    
+    return expiredCount;
+  } catch (error) {
+    console.error('Error expiring ads:', error);
+    throw error;
+  }
+}
+
+// Function to update user subscription in Firestore
+async function updateUserSubscription(userId, planId, session) {
+  const plan = SUBSCRIPTION_PLANS[planId];
+  if (!plan) {
+    throw new Error(`Unknown plan: ${planId}`);
+  }
+
+  // Calculate subscription end date
+  const startDate = new Date();
+  const endDate = new Date();
+  endDate.setDate(startDate.getDate() + plan.days);
+
+  // Create subscription document
+  const subscriptionData = {
+    userId: userId,
+    planId: planId,
+    planName: plan.name,
+    days: plan.days,
+    startDate: admin.firestore.Timestamp.fromDate(startDate),
+    endDate: admin.firestore.Timestamp.fromDate(endDate),
+    status: 'active',
+    paymentId: session.payment_intent || session.id,
+    stripeSessionId: session.id,
+    amount: session.amount_total / 100, // Convert from cents
+    currency: session.currency,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+
+  // Save to Firestore
+  const subscriptionRef = db.collection('subscriptions').doc();
+  await subscriptionRef.set(subscriptionData);
+
+  // Update user's subscription status
+  const userRef = db.collection('users').doc(userId);
+  await userRef.update({
+    hasActiveSubscription: true,
+    currentSubscriptionId: subscriptionRef.id,
+    subscriptionEndDate: admin.firestore.Timestamp.fromDate(endDate),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  return subscriptionRef.id;
+}
+
+// Middleware
+app.use(cors());
+
+// Webhook endpoint for handling Stripe events (must come before express.json())
+app.post('/api/webhooks', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+
+  try {
+    event = stripeClient.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.log(`Webhook signature verification failed.`, err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Handle the event
+  switch (event.type) {
+    case 'checkout.session.completed':
+      const session = event.data.object;
+      console.log('Checkout session completed:', session.id);
+
+      if (session.metadata?.type === 'ad') {
+        const adId = session.metadata.adId;
+        try {
+          await activateAd(adId, session);
+          console.log(`Successfully activated ad ${adId}`);
+        } catch (error) {
+          console.error('Error activating ad:', error);
+        }
+      } else {
+        // Extract user ID from client_reference_id (passed from Android app)
+        const userId = session.client_reference_id;
+        const planId = session.metadata?.planId;
+
+        if (userId && planId) {
+          try {
+            // Update user's subscription in Firestore
+            await updateUserSubscription(userId, planId, session);
+            console.log(`Successfully activated ${planId} subscription for user ${userId}`);
+          } catch (error) {
+            console.error('Error updating subscription:', error);
+          }
+        } else {
+          console.log('Missing userId or planId in session:', { userId, planId, metadata: session.metadata });
+        }
+      }
+      break;
+
+    case 'invoice.payment_succeeded':
+      // Handle recurring subscription payments
+      const invoice = event.data.object;
+      console.log('Invoice payment succeeded:', invoice.id);
+      // TODO: Handle recurring payment success
+      break;
+
+    case 'invoice.payment_failed':
+      // Handle failed recurring payments
+      const failedInvoice = event.data.object;
+      console.log('Invoice payment failed:', failedInvoice.id);
+      // TODO: Handle payment failure, maybe suspend subscription
+      break;
+
+    case 'customer.subscription.deleted':
+      // Handle subscription cancellation
+      const canceledSubscription = event.data.object;
+      console.log('Subscription canceled:', canceledSubscription.id);
+      // TODO: Deactivate user's subscription
+      break;
+
+    default:
+      console.log(`Unhandled event type ${event.type}`);
+  }
+
+  res.json({ received: true });
+});
+
+app.use(express.json());
+
+// Create PaymentIntent endpoint
+app.post('/api/create-payment-intent', async (req, res) => {
+  try {
+    const { planId, currency = 'usd' } = req.body;
+
+    if (!planId || !SUBSCRIPTION_PLANS[planId]) {
+      return res.status(400).json({
+        error: 'Invalid plan ID'
+      });
+    }
+
+    const plan = SUBSCRIPTION_PLANS[planId];
+
+    // Create PaymentIntent
+    const paymentIntent = await stripeClient.paymentIntents.create({
+      amount: plan.price,
+      currency: currency,
+      automatic_payment_methods: {
+        enabled: true,
+      },
+      metadata: {
+        planId: planId,
+        planName: plan.name
+      }
+    });
+
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+      amount: plan.price,
+      currency: currency,
+      planName: plan.name
+    });
+
+  } catch (error) {
+    console.error('Error creating payment intent:', error);
+    res.status(500).json({
+      error: 'Failed to create payment intent'
+    });
+  }
+});
+
+// Create Checkout Session endpoint
+app.post('/api/create-checkout-session', async (req, res) => {
+  try {
+    console.log('Received body:', req.body);
+    const { planId, userId, currency = 'usd' } = req.body;
+
+    if (!planId || !SUBSCRIPTION_PLANS[planId]) {
+      return res.status(400).json({
+        error: 'Invalid plan ID'
+      });
+    }
+
+    if (!userId) {
+      return res.status(400).json({
+        error: 'User ID required'
+      });
+    }
+
+    const plan = SUBSCRIPTION_PLANS[planId];
+
+    // Create Checkout Session
+    const session = await stripeClient.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: currency,
+            product_data: {
+              name: plan.name,
+            },
+            unit_amount: plan.price,
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: 'boattaxie://success', // Your app's deep link
+      cancel_url: 'boattaxie://cancel',
+      client_reference_id: userId,
+      metadata: {
+        planId: planId,
+        planName: plan.name
+      }
+    });
+
+    res.json({
+      url: session.url,
+      sessionId: session.id
+    });
+
+  } catch (error) {
+    console.error('Error creating checkout session:', error);
+    res.status(500).json({
+      error: 'Failed to create checkout session'
+    });
+  }
+});
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Create Ad Checkout Session endpoint
+app.post('/api/create-ad-checkout-session', async (req, res) => {
+  try {
+    const { durationDays, isFeatured, businessName, title, description, imageUri, logoUri, youtubeUrl, phone, email, website, category, location, userId, existingAdId } = req.body;
+
+    const price = AD_PRICES[isFeatured ? 'featured' : 'standard'][durationDays];
+
+    if (!price) {
+      return res.status(400).json({ error: 'Invalid duration or featured status' });
+    }
+
+    let adId;
+    let collection = 'ads';  // Default collection for new ads
+
+    if (existingAdId) {
+      // Check if the existing ad is in 'advertisements' collection (AI-generated ads)
+      const advertisementsDoc = await db.collection('advertisements').doc(existingAdId).get();
+      if (advertisementsDoc.exists) {
+        collection = 'advertisements';
+        adId = existingAdId;
+        console.log(`Activating existing ad ${adId} from ${collection} collection`);
+      } else {
+        // Check 'ads' collection
+        const adsDoc = await db.collection('ads').doc(existingAdId).get();
+        if (adsDoc.exists) {
+          collection = 'ads';
+          adId = existingAdId;
+          console.log(`Activating existing ad ${adId} from ${collection} collection`);
+        } else {
+          return res.status(404).json({ error: 'Ad not found' });
+        }
+      }
+    } else {
+      // Create new ad in Firestore as draft (filter out undefined values)
+      const adData = {
+        businessName: businessName || '',
+        title: title || '',
+        description: description || '',
+        imageUri: imageUri || '',
+        logoUri: logoUri || '',
+        youtubeUrl: youtubeUrl || '',
+        phone: phone || '',
+        email: email || '',
+        website: website || '',
+        category: category || '',
+        durationDays: durationDays || 7,
+        isFeatured: isFeatured || false,
+        location: location || '',
+        userId: userId || '',
+        status: 'draft',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+      
+      const adRef = await db.collection('ads').add(adData);
+      adId = adRef.id;
+      console.log(`Created new draft ad ${adId}`);
+    }
+
+    const session = await stripeClient.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: `Ad - ${durationDays} days ${isFeatured ? 'Featured' : 'Standard'}`,
+          },
+          unit_amount: price,
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      success_url: `boattaxie://ad-payment-success?adId=${adId}`,
+      cancel_url: `boattaxie://ad-payment-cancel`,
+      metadata: {
+        adId: adId,
+        type: 'ad',
+        collection: collection,  // Track which collection the ad is in
+        durationDays: durationDays.toString()
+      }
+    });
+
+    res.json({ url: session.url });
+
+  } catch (error) {
+    console.error('Error creating ad checkout session:', error);
+    res.status(500).json({ error: 'Failed to create ad checkout session' });
+  }
+});
+
+// Endpoint to manually expire old ads (can be called by a cron job)
+app.post('/api/expire-ads', async (req, res) => {
+  try {
+    const expiredCount = await expireOldAds();
+    res.json({ success: true, expiredCount });
+  } catch (error) {
+    console.error('Error in expire-ads endpoint:', error);
+    res.status(500).json({ error: 'Failed to expire ads' });
+  }
+});
+
+// Get active ads for the app
+app.get('/api/ads/active', async (req, res) => {
+  try {
+    // First expire any old ads
+    await expireOldAds();
+    
+    // Get all active ads
+    const adsSnapshot = await db.collection('ads')
+      .where('status', '==', 'active')
+      .orderBy('isFeatured', 'desc')
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .get();
+    
+    const ads = [];
+    adsSnapshot.forEach(doc => {
+      ads.push({ id: doc.id, ...doc.data() });
+    });
+    
+    res.json({ ads });
+  } catch (error) {
+    console.error('Error fetching active ads:', error);
+    res.status(500).json({ error: 'Failed to fetch ads' });
+  }
+});
+
+// Get ad status by ID
+app.get('/api/ads/:adId/status', async (req, res) => {
+  try {
+    const { adId } = req.params;
+    const adDoc = await db.collection('ads').doc(adId).get();
+    
+    if (!adDoc.exists) {
+      return res.status(404).json({ error: 'Ad not found' });
+    }
+    
+    const adData = adDoc.data();
+    res.json({
+      id: adId,
+      status: adData.status,
+      startDate: adData.startDate?.toDate(),
+      endDate: adData.endDate?.toDate()
+    });
+  } catch (error) {
+    console.error('Error fetching ad status:', error);
+    res.status(500).json({ error: 'Failed to fetch ad status' });
+  }
+});
+
+app.listen(port, '0.0.0.0', () => {
+  console.log(`BoatTaxie backend server running on port ${port}`);
+  console.log(`Make sure to set your STRIPE_SECRET_KEY environment variable`);
+  
+  // Run ad expiration check on startup
+  expireOldAds().then(count => {
+    console.log(`Startup: Expired ${count} ads`);
+    // Start the hourly scheduler after startup check
+    startAdExpirationScheduler();
+  }).catch(err => {
+    console.error('Startup ad expiration failed:', err);
+  });
+});
+
+
+
