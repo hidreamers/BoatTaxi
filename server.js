@@ -99,14 +99,30 @@ const AD_PRICES = {
 // Function to activate an ad after payment
 async function activateAd(adId, session) {
   try {
-    // Get the ad document to retrieve duration
-    const adDoc = await db.collection('ads').doc(adId).get();
+    // Determine which collection the ad is in from session metadata
+    let collection = session.metadata?.collection || 'ads';
+    let durationDays = parseInt(session.metadata?.durationDays) || 7;
+    
+    // Try to get the ad document
+    let adDoc = await db.collection(collection).doc(adId).get();
+    
+    // If not found in the specified collection, try the other one
     if (!adDoc.exists) {
-      throw new Error(`Ad ${adId} not found`);
+      const otherCollection = collection === 'ads' ? 'advertisements' : 'ads';
+      adDoc = await db.collection(otherCollection).doc(adId).get();
+      if (adDoc.exists) {
+        collection = otherCollection;
+        console.log(`Ad ${adId} found in ${collection} collection instead`);
+      } else {
+        throw new Error(`Ad ${adId} not found in either collection`);
+      }
     }
     
     const adData = adDoc.data();
-    const durationDays = adData.durationDays || 7;
+    // Use durationDays from session metadata, falling back to ad data, then to 7
+    if (!durationDays || isNaN(durationDays)) {
+      durationDays = adData.durationDays || 7;
+    }
     
     // Calculate start and end dates
     const startDate = new Date();
@@ -114,18 +130,26 @@ async function activateAd(adId, session) {
     endDate.setDate(startDate.getDate() + durationDays);
     
     // Update the ad with active status and dates
-    await db.collection('ads').doc(adId).update({
-      status: 'active',
+    const updateData = {
+      status: 'ACTIVE',  // Use uppercase to match app's enum
       startDate: admin.firestore.Timestamp.fromDate(startDate),
       endDate: admin.firestore.Timestamp.fromDate(endDate),
       activatedAt: admin.firestore.FieldValue.serverTimestamp(),
       paymentId: session.payment_intent || session.id,
       stripeSessionId: session.id,
       amountPaid: session.amount_total / 100,
+      paymentStatus: 'COMPLETED',
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    };
     
-    console.log(`Ad ${adId} activated until ${endDate.toISOString()}`);
+    // For advertisements collection (AI-generated), also set coupon expiry
+    if (collection === 'advertisements' && adData.hasCoupon) {
+      updateData.couponExpiresAt = admin.firestore.Timestamp.fromDate(endDate);
+    }
+    
+    await db.collection(collection).doc(adId).update(updateData);
+    
+    console.log(`Ad ${adId} in ${collection} activated until ${endDate.toISOString()}`);
     return true;
   } catch (error) {
     console.error(`Error activating ad ${adId}:`, error);
@@ -400,7 +424,7 @@ app.get('/api/health', (req, res) => {
 // Create Ad Checkout Session endpoint
 app.post('/api/create-ad-checkout-session', async (req, res) => {
   try {
-    const { durationDays, isFeatured, businessName, title, description, imageUri, logoUri, youtubeUrl, phone, email, website, category, location, userId } = req.body;
+    const { durationDays, isFeatured, businessName, title, description, imageUri, logoUri, youtubeUrl, phone, email, website, category, location, userId, existingAdId } = req.body;
 
     const price = AD_PRICES[isFeatured ? 'featured' : 'standard'][durationDays];
 
@@ -408,29 +432,52 @@ app.post('/api/create-ad-checkout-session', async (req, res) => {
       return res.status(400).json({ error: 'Invalid duration or featured status' });
     }
 
-    // Create ad in Firestore as draft (filter out undefined values)
-    const adData = {
-      businessName: businessName || '',
-      title: title || '',
-      description: description || '',
-      imageUri: imageUri || '',
-      logoUri: logoUri || '',
-      youtubeUrl: youtubeUrl || '',
-      phone: phone || '',
-      email: email || '',
-      website: website || '',
-      category: category || '',
-      durationDays: durationDays || 7,
-      isFeatured: isFeatured || false,
-      location: location || '',
-      userId: userId || '',
-      status: 'draft',
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    };
-    
-    const adRef = await db.collection('ads').add(adData);
+    let adId;
+    let collection = 'ads';  // Default collection for new ads
 
-    const adId = adRef.id;
+    if (existingAdId) {
+      // Check if the existing ad is in 'advertisements' collection (AI-generated ads)
+      const advertisementsDoc = await db.collection('advertisements').doc(existingAdId).get();
+      if (advertisementsDoc.exists) {
+        collection = 'advertisements';
+        adId = existingAdId;
+        console.log(`Activating existing ad ${adId} from ${collection} collection`);
+      } else {
+        // Check 'ads' collection
+        const adsDoc = await db.collection('ads').doc(existingAdId).get();
+        if (adsDoc.exists) {
+          collection = 'ads';
+          adId = existingAdId;
+          console.log(`Activating existing ad ${adId} from ${collection} collection`);
+        } else {
+          return res.status(404).json({ error: 'Ad not found' });
+        }
+      }
+    } else {
+      // Create new ad in Firestore as draft (filter out undefined values)
+      const adData = {
+        businessName: businessName || '',
+        title: title || '',
+        description: description || '',
+        imageUri: imageUri || '',
+        logoUri: logoUri || '',
+        youtubeUrl: youtubeUrl || '',
+        phone: phone || '',
+        email: email || '',
+        website: website || '',
+        category: category || '',
+        durationDays: durationDays || 7,
+        isFeatured: isFeatured || false,
+        location: location || '',
+        userId: userId || '',
+        status: 'draft',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+      
+      const adRef = await db.collection('ads').add(adData);
+      adId = adRef.id;
+      console.log(`Created new draft ad ${adId}`);
+    }
 
     const session = await stripeClient.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -449,7 +496,9 @@ app.post('/api/create-ad-checkout-session', async (req, res) => {
       cancel_url: `boattaxie://ad-payment-cancel`,
       metadata: {
         adId: adId,
-        type: 'ad'
+        type: 'ad',
+        collection: collection,  // Track which collection the ad is in
+        durationDays: durationDays.toString()
       }
     });
 
