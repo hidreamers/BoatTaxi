@@ -1,0 +1,30 @@
+[
+    {
+        "merged": "com.boattaxie.app-debug-108:/xml_backup_rules.xml.flat",
+        "source": "com.boattaxie.app-main-110:/xml/backup_rules.xml"
+    },
+    {
+        "merged": "com.boattaxie.app-debug-108:/xml_network_security_config.xml.flat",
+        "source": "com.boattaxie.app-main-110:/xml/network_security_config.xml"
+    },
+    {
+        "merged": "com.boattaxie.app-debug-108:/xml_file_paths.xml.flat",
+        "source": "com.boattaxie.app-main-110:/xml/file_paths.xml"
+    },
+    {
+        "merged": "com.boattaxie.app-debug-108:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "com.boattaxie.app-main-110:/drawable/ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "com.boattaxie.app-debug-108:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.boattaxie.app-main-110:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "com.boattaxie.app-debug-108:/xml_data_extraction_rules.xml.flat",
+        "source": "com.boattaxie.app-main-110:/xml/data_extraction_rules.xml"
+    },
+    {
+        "merged": "com.boattaxie.app-debug-108:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.boattaxie.app-main-110:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    }
+]

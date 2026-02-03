@@ -1,0 +1,26 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.boattaxie.app-mergeDebugResources-106:/values-id/values-id.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\User\\.gradle\\caches\\8.14.3\\transforms\\86c5094ce5c3f9587e64e1a426f0a643\\transformed\\play-services-wallet-19.2.0-beta01\\res\\values-id\\values.xml",
+                    "from": {
+                        "startLines": "4",
+                        "startColumns": "0",
+                        "startOffsets": "202",
+                        "endColumns": "73",
+                        "endOffsets": "275"
+                    },
+                    "to": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "77",
+                        "endOffsets": "128"
+                    }
+                }
+            ]
+        }
+    ]
+}

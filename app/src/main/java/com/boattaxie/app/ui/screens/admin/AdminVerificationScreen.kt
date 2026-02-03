@@ -301,8 +301,9 @@ private fun VerificationCard(
                         val docType = submission.documents.getOrNull(index)?.documentType
                         
                         Card(
-                            onClick = { selectedImageUrl = url },
-                            modifier = Modifier.size(100.dp),
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clickable { selectedImageUrl = url },
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
                         ) {
                             Box(modifier = Modifier.fillMaxSize()) {
