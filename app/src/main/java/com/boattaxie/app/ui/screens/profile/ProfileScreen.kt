@@ -1,7 +1,14 @@
 package com.boattaxie.app.ui.screens.profile
 
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -26,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -33,7 +41,13 @@ import com.boattaxie.app.R
 import com.boattaxie.app.data.model.*
 import com.boattaxie.app.ui.components.*
 import com.boattaxie.app.ui.theme.*
+import com.boattaxie.app.util.UpdateChecker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +59,7 @@ fun ProfileScreen(
     onNavigateToHelp: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onNavigateToAdminVerifications: (() -> Unit)? = null,
+    onNavigateToAdminDockLocations: (() -> Unit)? = null,
     onSignOut: () -> Unit,
     onNavigateBack: () -> Unit,
     viewModel: ProfileViewModel = hiltViewModel()
@@ -59,6 +74,9 @@ fun ProfileScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, stringResource(R.string.back))
                     }
+                },
+                actions = {
+                    LiveUsersBadge(compact = true)
                 }
             )
         }
@@ -163,13 +181,6 @@ fun ProfileScreen(
                 onClick = onNavigateToTripHistory
             )
             
-            ProfileMenuItem(
-                icon = Icons.Default.Payment,
-                title = stringResource(R.string.payment_methods),
-                subtitle = stringResource(R.string.manage_payment_options),
-                onClick = onNavigateToPaymentMethods
-            )
-            
             Divider(modifier = Modifier.padding(horizontal = 16.dp))
             
             ProfileMenuItem(
@@ -193,8 +204,49 @@ fun ProfileScreen(
                 onClick = onNavigateToAbout
             )
             
-            // Admin section - only show for admin email
-            val isAdmin = uiState.user?.email == "jerimiah@lacunabotanicals.com"
+            // Check for Updates
+            var isCheckingUpdate by remember { mutableStateOf(false) }
+            var isDownloading by remember { mutableStateOf(false) }
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            
+            ProfileMenuItem(
+                icon = Icons.Default.SystemUpdate,
+                title = "Check for Updates",
+                subtitle = if (isDownloading) "Downloading update..." else if (isCheckingUpdate) "Checking..." else "Download latest version (auto-checks daily)",
+                onClick = {
+                    if (!isCheckingUpdate && !isDownloading) {
+                        isCheckingUpdate = true
+                        scope.launch {
+                            try {
+                                val hasUpdate = withContext(Dispatchers.IO) {
+                                    UpdateChecker.isUpdateAvailable(context)
+                                }
+                                isCheckingUpdate = false
+                                if (hasUpdate) {
+                                    isDownloading = true
+                                    Toast.makeText(context, "Update found! Downloading...", Toast.LENGTH_SHORT).show()
+                                    withContext(Dispatchers.IO) {
+                                        UpdateChecker.downloadAndInstallUpdate(context, showNotification = false)
+                                    }
+                                    isDownloading = false
+                                } else {
+                                    Toast.makeText(context, "You have the latest version!", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                isCheckingUpdate = false
+                                isDownloading = false
+                                Toast.makeText(context, "Check failed: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                },
+                iconTint = Primary
+            )
+            
+            // Admin section - only show for admin emails
+            val adminEmails = listOf("jerimiah@lacunabotanicals.com", "lacunacbd@gmail.com")
+            val isAdmin = uiState.user?.email in adminEmails
             if (isAdmin && onNavigateToAdminVerifications != null) {
                 Divider(modifier = Modifier.padding(horizontal = 16.dp))
                 
@@ -213,6 +265,17 @@ fun ProfileScreen(
                     iconTint = Primary,
                     titleColor = Primary
                 )
+                
+                if (onNavigateToAdminDockLocations != null) {
+                    ProfileMenuItem(
+                        icon = Icons.Default.AddLocation,
+                        title = "Manage Dock Locations",
+                        subtitle = "Add or remove dock/pickup locations",
+                        onClick = onNavigateToAdminDockLocations,
+                        iconTint = Success,
+                        titleColor = Success
+                    )
+                }
             }
             
             Divider(modifier = Modifier.padding(horizontal = 16.dp))

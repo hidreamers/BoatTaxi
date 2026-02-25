@@ -2,6 +2,7 @@ package com.boattaxie.app.ui.screens.profile
 
 import android.content.Context
 import android.net.Uri
+import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.boattaxie.app.data.model.Booking
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import java.net.URL
 import javax.inject.Inject
 
 data class ProfileUiState(
@@ -29,6 +31,12 @@ data class ProfileUiState(
     val pushNotificationsEnabled: Boolean = true,
     val emailNotificationsEnabled: Boolean = true,
     val locationSharingEnabled: Boolean = true,
+    
+    // Promo codes
+    val promoCodeMessage: String? = null,
+    val promoCodeSuccess: Boolean = false,
+    val hasFreeBookings: Boolean = false,
+    val appliedPromoCode: String? = null,
     
     val errorMessage: String? = null
 )
@@ -140,7 +148,7 @@ class ProfileViewModel @Inject constructor(
     }
     
     fun addPaymentMethod(cardNumber: String, expiry: String, cvv: String) {
-        // In real app, this would go through Stripe
+        // Payment methods are now handled via Google Play Billing
         val newMethod = PaymentMethod(
             id = System.currentTimeMillis().toString(),
             lastFour = cardNumber.takeLast(4),
@@ -181,6 +189,10 @@ class ProfileViewModel @Inject constructor(
     
     fun signOut(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
+            // Clear onboarding flag so it shows again on next sign in
+            val prefs = context.getSharedPreferences("boat_taxie_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("is_first_launch", true).apply()
+            
             authRepository.signOut()
             onComplete()
         }
@@ -295,5 +307,79 @@ class ProfileViewModel @Inject constructor(
             android.util.Log.e("ProfileVM", "Failed to upload image to Firebase Storage: ${e.message}", e)
             null
         }
+    }
+    
+    /**
+     * Apply a promo code with anti-abuse protection
+     * Gets device ID and public IP to prevent abuse across multiple accounts
+     */
+    fun applyPromoCode(code: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, promoCodeMessage = null) }
+            
+            // Get device ID (Android ID - unique per device/app install)
+            val deviceId = try {
+                Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+            } catch (e: Exception) {
+                null
+            }
+            
+            // Get public IP address for anti-abuse tracking
+            val ipAddress = withContext(Dispatchers.IO) {
+                try {
+                    // Use a simple IP detection service
+                    URL("https://api.ipify.org").readText().trim()
+                } catch (e: Exception) {
+                    android.util.Log.w("ProfileVM", "Could not get IP address: ${e.message}")
+                    null
+                }
+            }
+            
+            android.util.Log.d("ProfileVM", "Promo anti-abuse: deviceId=$deviceId, ip=$ipAddress")
+            
+            val result = authRepository.applyPromoCode(code, deviceId, ipAddress)
+            result.fold(
+                onSuccess = { message ->
+                    _uiState.update { 
+                        it.copy(
+                            isLoading = false,
+                            promoCodeMessage = message,
+                            promoCodeSuccess = true,
+                            hasFreeBookings = true,
+                            appliedPromoCode = code.uppercase()
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            promoCodeMessage = error.message ?: "Invalid promo code",
+                            promoCodeSuccess = false
+                        )
+                    }
+                }
+            )
+        }
+    }
+    
+    /**
+     * Check if user has free bookings perk
+     */
+    fun checkFreeBookings() {
+        viewModelScope.launch {
+            val hasFree = authRepository.hasFreeBookingsForLife()
+            val user = _uiState.value.user
+            _uiState.update { 
+                it.copy(
+                    hasFreeBookings = hasFree,
+                    appliedPromoCode = user?.appliedPromoCode
+                )
+            }
+        }
+    }
+    
+    fun clearPromoMessage() {
+        _uiState.update { it.copy(promoCodeMessage = null) }
     }
 }

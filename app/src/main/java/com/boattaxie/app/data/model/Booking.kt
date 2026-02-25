@@ -6,6 +6,13 @@ import com.google.firebase.firestore.PropertyName
 
 /**
  * Booking/Trip model for ride requests
+ * 
+ * NEW FLOW (Driver-set pricing):
+ * 1. Rider creates booking (no price set) → status=PENDING
+ * 2. All drivers see request and can submit price offers
+ * 3. Rider sees list of driver offers with prices
+ * 4. Rider picks an offer → status=ACCEPTED, driver/price set
+ * 5. Ride proceeds normally
  */
 data class Booking(
     @DocumentId
@@ -21,15 +28,17 @@ data class Booking(
     val destinationAddress: String = "",
     val estimatedDistance: Float = 0f, // in km or nautical miles
     val estimatedDuration: Int = 0, // in minutes
-    val estimatedFare: Double = 0.0,
-    val finalFare: Double? = null,
+    val estimatedFare: Double = 0.0, // App's estimate (for reference only)
+    val finalFare: Double? = null,   // Actual price from accepted driver offer
+    val passengerCount: Int = 1,     // Number of passengers for the ride
     
     // Rider info - so driver can see who is requesting
     val riderName: String? = null,
     val riderPhoneNumber: String? = null,
     val riderPhotoUrl: String? = null,
+    val riderIsLocalResident: Boolean = true, // Is rider a local or visitor?
     
-    // Driver/Captain info - populated when driver accepts
+    // Driver/Captain info - populated when rider accepts an offer
     val driverName: String? = null,
     val driverPhoneNumber: String? = null,
     val driverPhotoUrl: String? = null,
@@ -42,12 +51,17 @@ data class Booking(
     val vehicleColor: String? = null,          // Vehicle color
     val vehiclePhoto: String? = null,          // Photo of vehicle/boat
     
-    // Driver fare adjustment - captain can adjust the fare
+    // Driver offers - multiple drivers can submit price offers
+    // Stored in subcollection "offers" for real-time updates
+    val acceptedOfferId: String? = null,       // ID of the offer rider accepted
+    val acceptedPrice: Double? = null,         // Price from accepted offer
+    
+    // Legacy fare adjustment fields (keeping for backwards compatibility)
     val driverAdjustedFare: Double? = null,
-    val fareAdjustmentReason: String? = null, // e.g., "Night rate", "Bad weather", "Holiday"
+    val fareAdjustmentReason: String? = null,
     val riderAcceptedAdjustment: Boolean = false,
     @get:PropertyName("nightRate") @set:PropertyName("nightRate")
-    var isNightRate: Boolean = false, // Automatic night rate (9PM - 6AM)
+    var isNightRate: Boolean = false,
     
     val paymentStatus: PaymentStatus = PaymentStatus.PENDING,
     val paymentMethod: String? = null,
@@ -68,10 +82,10 @@ data class Booking(
 
 enum class BookingStatus {
     @PropertyName("pending")
-    PENDING,           // Waiting for driver to accept
+    PENDING,           // Waiting for driver offers (no driver assigned yet)
     
     @PropertyName("accepted")
-    ACCEPTED,          // Driver accepted, en route to pickup
+    ACCEPTED,          // Rider accepted an offer, driver en route to pickup
     
     @PropertyName("arrived")
     ARRIVED,           // Driver arrived at pickup location
@@ -86,7 +100,7 @@ enum class BookingStatus {
     CANCELLED,         // Trip cancelled
     
     @PropertyName("no_drivers")
-    NO_DRIVERS         // No drivers available
+    NO_DRIVERS         // No drivers available/no offers received
 }
 
 enum class PaymentStatus {
@@ -101,6 +115,31 @@ enum class PaymentStatus {
     @PropertyName("refunded")
     REFUNDED
 }
+
+/**
+ * Driver offer for a ride - multiple drivers can submit offers with their prices
+ * Rider sees all offers and picks the one they want
+ */
+data class DriverOffer(
+    val id: String = "",
+    val driverId: String = "",
+    val driverName: String = "",
+    val driverPhotoUrl: String? = null,
+    val driverRating: Float = 5.0f,
+    val driverTotalTrips: Int = 0,
+    val driverPhoneNumber: String? = null,
+    val price: Double = 0.0,
+    val vehicleType: VehicleType = VehicleType.BOAT,
+    val vehiclePlate: String? = null,
+    val vehicleModel: String? = null,
+    val vehicleColor: String? = null,
+    val vehiclePhoto: String? = null,
+    val message: String? = null,  // Optional message from driver
+    val submittedAt: Long = System.currentTimeMillis(),
+    val isAccepted: Boolean = false,
+    val isRejected: Boolean = false,  // Rider rejected this price
+    val rejectedAt: Long? = null  // When the offer was rejected
+)
 
 /**
  * Fare calculation parameters
@@ -118,38 +157,47 @@ data class FareConfig(
 /**
  * Fare Calculator based on Bocas del Toro, Panama pricing:
  * 
- * WATER TAXIS (Boats):
- * - Almirante to Bocas Town: ~$6-$8
- * - Bocas Town to Bastimentos: ~$3-$5/person
- * - Bocas Town to Carenero: ~$2-$3/person
- * - Bocas Town to Solarte (Bambuda): ~$20 for 1-2 people
- * - Island Hopping: ~$5-$10+/person
+ * WATER TAXIS (Boats) - Based on Feb 2026 local prices:
+ * - Bocas Town to Carenero: $1-2 (very short, ~0.5km)
+ * - Bocas Town to Bastimentos (Old Bank): $3-5 (~2km)
+ * - Bocas Town to Red Frog: $5-8 (~4km)
+ * - Bocas Town to Solarte/Bambuda: $8-12 (~5km)
+ * - Bocas Town to Zapatillas: $40-50 private (~15-20km, far)
+ * - Almirante to Bocas Town: $5-6 (~10km, 30 min)
+ * - Island Hopping Day Tour: $25-30 (6+ hours, multiple stops)
  * 
- * LAND TAXIS (Isla Colón):
- * - Within Bocas Town: $1-$2/person
- * - Bocas Town to Airport: ~$2/person
- * - Bocas Town to Boca del Drago: ~$2.50/person
+ * Key insight: Short trips ($1-5) are cheap, but longer private
+ * water taxi trips scale up significantly due to fuel costs
  * 
- * TOURIST PRICING: Tourists may be charged ~20-30% more
+ * LAND TAXIS (Isla Colón) - Updated Feb 2026:
+ * - Bocas Town short hop: $0.60-$2.00 (~0.8 mi)
+ * - Bocas Town ↔ Airport: $1.00-$2.00 (~0.9 mi)
+ * - Bocas Town → Paunch: $3.00-$8.00 (~2.9 mi)
+ * - Bocas Town → Bluff Beach: $15.00-$20.00 (~4.2 mi)
+ * - Bocas Town → Boca del Drago: $26.00-$31.00 (~12.2 mi)
  */
 object FareCalculator {
     // Water Taxi (Boat) pricing - based on Bocas del Toro rates
+    // Short trips cheap (Carenero $2-3), longer trips expensive (Zapatilla $15+)
+    // Fuel costs add up significantly on water for longer distances
     private val boatFareConfig = FareConfig(
         vehicleType = VehicleType.BOAT,
-        baseFare = 3.00,      // Base fare for short trips
-        perKmRate = 1.50,     // Per km rate
+        baseFare = 2.00,      // Base fare (Carenero-level short trip)
+        perKmRate = 3.50,     // Higher per km - fuel expensive on water
         perMinuteRate = 0.15, // Per minute (boats are slower)
-        minimumFare = 3.00,   // Minimum like Carenero trip
+        minimumFare = 2.50,   // Minimum like Carenero trip
         bookingFee = 0.50     // Small app fee
     )
     
-    // Land Taxi pricing - based on Isla Colón rates
+    // Land Taxi pricing - based on Isla Colón rates (Feb 2026)
+    // In town: cheap ($0.60-$2), Bluff Beach: $15 (bumpy road, ~6.8km)
+    // Boca del Drago: $26-31 (~12km to far end of island)
     private val taxiFareConfig = FareConfig(
         vehicleType = VehicleType.TAXI,
-        baseFare = 1.00,      // Base fare $1
-        perKmRate = 0.50,     // Per km rate
-        perMinuteRate = 0.10, // Per minute
-        minimumFare = 1.50,   // Minimum within Bocas Town
+        baseFare = 0.60,      // Base fare (short hop minimum)
+        perKmRate = 2.10,     // Higher rate - rough roads, fuel cost
+        perMinuteRate = 0.05, // Per minute (short rides)
+        minimumFare = 1.00,   // Minimum within Bocas Town
         bookingFee = 0.25     // Small app fee
     )
     
@@ -163,10 +211,12 @@ object FareCalculator {
         "bocas_zapatilla" to RoutePrice(VehicleType.BOAT, 8.00, 15.00),
         "bocas_redfrog" to RoutePrice(VehicleType.BOAT, 5.00, 8.00),
         
-        // Land taxi routes (Isla Colón)
-        "bocas_airport" to RoutePrice(VehicleType.TAXI, 2.00, 3.00),
-        "bocas_drago" to RoutePrice(VehicleType.TAXI, 2.50, 4.00),
-        "bocas_bluff" to RoutePrice(VehicleType.TAXI, 2.00, 3.00)
+        // Land taxi routes (Isla Colón) - Updated Feb 2026
+        "bocas_short" to RoutePrice(VehicleType.TAXI, 0.60, 2.00),      // Short hop in town
+        "bocas_airport" to RoutePrice(VehicleType.TAXI, 1.00, 2.00),    // ~0.9 mi
+        "bocas_paunch" to RoutePrice(VehicleType.TAXI, 3.00, 8.00),     // ~2.9 mi
+        "bocas_bluff" to RoutePrice(VehicleType.TAXI, 15.00, 20.00),    // ~4.2 mi
+        "bocas_drago" to RoutePrice(VehicleType.TAXI, 26.00, 31.00)     // ~12.2 mi
     )
     
     // Tourist markup (20% higher for tourists)

@@ -32,6 +32,8 @@ class BookingRepository @Inject constructor(
         destinationAddress: String,
         estimatedDistance: Float,
         estimatedDuration: Int,
+        estimatedFare: Double,
+        passengerCount: Int = 1,
         requestedDriverId: String? = null,
         riderName: String? = null,
         riderPhoneNumber: String? = null,
@@ -39,11 +41,9 @@ class BookingRepository @Inject constructor(
     ): Result<Booking> = runCatching {
         val uid = userId ?: throw Exception("User not logged in")
         
-        val estimatedFare = FareCalculator.calculateFare(
-            vehicleType = vehicleType,
-            distanceKm = estimatedDistance,
-            durationMinutes = estimatedDuration
-        )
+        // The estimatedFare is ALWAYS the actual fare - paid in cash to driver
+        // Free bookings/subscriptions only affect app fees, not ride fares
+        android.util.Log.d("BookingRepo", "createBooking: estimatedFare=$estimatedFare")
         
         val booking = Booking(
             id = UUID.randomUUID().toString(),
@@ -57,6 +57,7 @@ class BookingRepository @Inject constructor(
             estimatedDistance = estimatedDistance,
             estimatedDuration = estimatedDuration,
             estimatedFare = estimatedFare,
+            passengerCount = passengerCount,
             riderName = riderName,
             riderPhoneNumber = riderPhoneNumber,
             riderPhotoUrl = riderPhotoUrl,
@@ -69,6 +70,7 @@ class BookingRepository @Inject constructor(
             "riderId" to booking.riderId,
             "vehicleType" to vehicleType.name.lowercase(), // "boat" or "taxi"
             "status" to "pending", // lowercase for queries
+            "passengerCount" to passengerCount,
             "pickupLocation" to mapOf(
                 "latitude" to pickupLocation.latitude,
                 "longitude" to pickupLocation.longitude
@@ -93,10 +95,15 @@ class BookingRepository @Inject constructor(
         riderPhoneNumber?.let { bookingMap["riderPhoneNumber"] = it }
         riderPhotoUrl?.let { bookingMap["riderPhotoUrl"] = it }
         
+        // Get rider's residency status to show driver if local or visitor
+        val currentUser = firestore.collection("users").document(uid).get().await()
+        val isLocalResident = currentUser.getBoolean("isLocalResident") ?: true
+        bookingMap["riderIsLocalResident"] = isLocalResident
+        
         // Add specific driver if requested
         requestedDriverId?.let { bookingMap["driverId"] = it }
         
-        android.util.Log.d("BookingRepo", "Creating booking: id=${booking.id}, vehicleType=${vehicleType.name.lowercase()}, status=pending, requestedDriver=$requestedDriverId")
+        android.util.Log.d("BookingRepo", "Creating booking: id=${booking.id}, vehicleType=${vehicleType.name.lowercase()}, fare=${booking.estimatedFare}")
         android.util.Log.d("BookingRepo", "  pickup: ${booking.pickupAddress}, dropoff: ${booking.destinationAddress}")
         
         firestore.collection("bookings")
@@ -156,6 +163,284 @@ class BookingRepository @Inject constructor(
                 )
             )
             .await()
+    }
+    
+    /**
+     * Driver proposes a fare change to the rider
+     * Rider will be notified and can accept or decline
+     * Also includes driver info so rider knows who is offering
+     */
+    suspend fun proposeFareChange(bookingId: String, newFare: Double, reason: String): Result<Unit> = runCatching {
+        val uid = userId ?: throw Exception("User not logged in")
+        
+        android.util.Log.d("BookingRepo", "proposeFareChange: bookingId=$bookingId, newFare=$newFare, reason=$reason")
+        
+        // Get driver details to include
+        val driverDoc = firestore.collection("users")
+            .document(uid)
+            .get()
+            .await()
+        
+        val driverName = driverDoc.getString("fullName") ?: "Driver"
+        val driverPhone = driverDoc.getString("phoneNumber") ?: ""
+        val driverPhoto = driverDoc.getString("profilePhotoUrl")
+        val driverRating = driverDoc.getDouble("rating")?.toFloat() ?: 5.0f
+        val driverTrips = driverDoc.getLong("totalTrips")?.toInt() ?: 0
+        
+        firestore.collection("bookings")
+            .document(bookingId)
+            .update(
+                mapOf(
+                    "driverAdjustedFare" to newFare,
+                    "fareAdjustmentReason" to reason,
+                    "riderAcceptedAdjustment" to false,
+                    "fareProposedAt" to Timestamp.now(),
+                    "fareProposedByDriverId" to uid,
+                    // Include driver info so rider sees who is proposing
+                    "driverId" to uid,
+                    "driverName" to driverName,
+                    "driverPhoneNumber" to driverPhone,
+                    "driverPhotoUrl" to driverPhoto,
+                    "driverRatingValue" to driverRating,
+                    "driverTotalTrips" to driverTrips
+                )
+            )
+            .await()
+        
+        android.util.Log.d("BookingRepo", "Fare change proposed successfully by $driverName")
+    }
+    
+    /**
+     * Driver submits a price offer for a ride request
+     * Multiple drivers can submit offers, rider picks one
+     */
+    suspend fun submitDriverOffer(bookingId: String, price: Double, message: String? = null): Result<DriverOffer> = runCatching {
+        val uid = userId ?: throw Exception("User not logged in")
+        
+        android.util.Log.d("BookingRepo", "submitDriverOffer: bookingId=$bookingId, price=$price")
+        
+        // Get driver details
+        val driverDoc = firestore.collection("users")
+            .document(uid)
+            .get()
+            .await()
+        
+        val driverName = driverDoc.getString("fullName") ?: "Driver"
+        val driverPhone = driverDoc.getString("phoneNumber") ?: ""
+        val driverPhoto = driverDoc.getString("profilePhotoUrl")
+        val driverRating = driverDoc.getDouble("rating")?.toFloat() ?: 5.0f
+        val driverTrips = driverDoc.getLong("totalTrips")?.toInt() ?: 0
+        val vehiclePlate = driverDoc.getString("vehiclePlate")
+        val vehicleModel = driverDoc.getString("vehicleModel")
+        val vehicleColor = driverDoc.getString("vehicleColor")
+        val vehiclePhoto = driverDoc.getString("vehiclePhoto")
+        
+        // Get booking to know vehicle type
+        val bookingDoc = firestore.collection("bookings")
+            .document(bookingId)
+            .get()
+            .await()
+        val vehicleTypeStr = bookingDoc.getString("vehicleType") ?: "boat"
+        val vehicleType = if (vehicleTypeStr == "taxi") VehicleType.TAXI else VehicleType.BOAT
+        
+        val offer = DriverOffer(
+            id = UUID.randomUUID().toString(),
+            driverId = uid,
+            driverName = driverName,
+            driverPhotoUrl = driverPhoto,
+            driverRating = driverRating,
+            driverTotalTrips = driverTrips,
+            driverPhoneNumber = driverPhone,
+            price = price,
+            vehicleType = vehicleType,
+            vehiclePlate = vehiclePlate,
+            vehicleModel = vehicleModel,
+            vehicleColor = vehicleColor,
+            vehiclePhoto = vehiclePhoto,
+            message = message,
+            submittedAt = System.currentTimeMillis(),
+            isAccepted = false
+        )
+        
+        // Store offer in subcollection
+        val offerMap = mapOf(
+            "driverId" to offer.driverId,
+            "driverName" to offer.driverName,
+            "driverPhotoUrl" to offer.driverPhotoUrl,
+            "driverRating" to offer.driverRating,
+            "driverTotalTrips" to offer.driverTotalTrips,
+            "driverPhoneNumber" to offer.driverPhoneNumber,
+            "price" to offer.price,
+            "vehicleType" to vehicleTypeStr,
+            "vehiclePlate" to offer.vehiclePlate,
+            "vehicleModel" to offer.vehicleModel,
+            "vehicleColor" to offer.vehicleColor,
+            "vehiclePhoto" to offer.vehiclePhoto,
+            "message" to offer.message,
+            "submittedAt" to offer.submittedAt,
+            "isAccepted" to false
+        )
+        
+        firestore.collection("bookings")
+            .document(bookingId)
+            .collection("offers")
+            .document(offer.id)
+            .set(offerMap)
+            .await()
+        
+        android.util.Log.d("BookingRepo", "Driver offer submitted: $driverName for $$price")
+        offer
+    }
+    
+    /**
+     * Check if driver already submitted an offer for this booking
+     */
+    suspend fun getDriverOfferForBooking(bookingId: String): DriverOffer? {
+        val uid = userId ?: return null
+        
+        val offers = firestore.collection("bookings")
+            .document(bookingId)
+            .collection("offers")
+            .whereEqualTo("driverId", uid)
+            .get()
+            .await()
+        
+        return offers.documents.firstOrNull()?.let { doc ->
+            DriverOffer(
+                id = doc.id,
+                driverId = doc.getString("driverId") ?: "",
+                driverName = doc.getString("driverName") ?: "",
+                driverPhotoUrl = doc.getString("driverPhotoUrl"),
+                driverRating = doc.getDouble("driverRating")?.toFloat() ?: 5.0f,
+                driverTotalTrips = doc.getLong("driverTotalTrips")?.toInt() ?: 0,
+                driverPhoneNumber = doc.getString("driverPhoneNumber"),
+                price = doc.getDouble("price") ?: 0.0,
+                message = doc.getString("message"),
+                submittedAt = doc.getLong("submittedAt") ?: 0L,
+                isAccepted = doc.getBoolean("isAccepted") ?: false,
+                isRejected = doc.getBoolean("isRejected") ?: false,
+                rejectedAt = doc.getLong("rejectedAt")
+            )
+        }
+    }
+    
+    /**
+     * Observe all driver offers for a booking (for rider to see)
+     */
+    fun observeDriverOffers(bookingId: String): Flow<List<DriverOffer>> = callbackFlow {
+        val listener = firestore.collection("bookings")
+            .document(bookingId)
+            .collection("offers")
+            .orderBy("price", Query.Direction.ASCENDING) // Cheapest first
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.e("BookingRepo", "Error observing offers: ${error.message}")
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                
+                val offers = snapshot?.documents?.map { doc ->
+                    DriverOffer(
+                        id = doc.id,
+                        driverId = doc.getString("driverId") ?: "",
+                        driverName = doc.getString("driverName") ?: "",
+                        driverPhotoUrl = doc.getString("driverPhotoUrl"),
+                        driverRating = doc.getDouble("driverRating")?.toFloat() ?: 5.0f,
+                        driverTotalTrips = doc.getLong("driverTotalTrips")?.toInt() ?: 0,
+                        driverPhoneNumber = doc.getString("driverPhoneNumber"),
+                        price = doc.getDouble("price") ?: 0.0,
+                        vehiclePlate = doc.getString("vehiclePlate"),
+                        vehicleModel = doc.getString("vehicleModel"),
+                        vehicleColor = doc.getString("vehicleColor"),
+                        vehiclePhoto = doc.getString("vehiclePhoto"),
+                        message = doc.getString("message"),
+                        submittedAt = doc.getLong("submittedAt") ?: 0L,
+                        isAccepted = doc.getBoolean("isAccepted") ?: false,
+                        isRejected = doc.getBoolean("isRejected") ?: false,
+                        rejectedAt = doc.getLong("rejectedAt")
+                    )
+                } ?: emptyList()
+                
+                android.util.Log.d("BookingRepo", "Received ${offers.size} driver offers")
+                trySend(offers)
+            }
+        
+        awaitClose { listener.remove() }
+    }
+    
+    /**
+     * Rider accepts a driver's offer - this confirms the ride
+     */
+    suspend fun acceptDriverOffer(bookingId: String, offer: DriverOffer): Result<Unit> = runCatching {
+        android.util.Log.d("BookingRepo", "acceptDriverOffer: bookingId=$bookingId, offerId=${offer.id}, price=${offer.price}")
+        
+        // Get driver's license info for the booking
+        val driverDoc = firestore.collection("users")
+            .document(offer.driverId)
+            .get()
+            .await()
+        
+        val licenseNumber = driverDoc.getString("licenseNumber")
+        val licenseType = driverDoc.getString("licenseType")
+        
+        // Update booking with accepted offer details
+        firestore.collection("bookings")
+            .document(bookingId)
+            .update(
+                mapOf(
+                    "status" to "accepted",
+                    "driverId" to offer.driverId,
+                    "driverName" to offer.driverName,
+                    "driverPhoneNumber" to offer.driverPhoneNumber,
+                    "driverPhotoUrl" to offer.driverPhotoUrl,
+                    "driverRatingValue" to offer.driverRating,
+                    "driverTotalTrips" to offer.driverTotalTrips,
+                    "driverLicenseNumber" to licenseNumber,
+                    "driverLicenseType" to licenseType,
+                    "vehiclePlate" to offer.vehiclePlate,
+                    "vehicleModel" to offer.vehicleModel,
+                    "vehicleColor" to offer.vehicleColor,
+                    "vehiclePhoto" to offer.vehiclePhoto,
+                    "acceptedOfferId" to offer.id,
+                    "acceptedPrice" to offer.price,
+                    "finalFare" to offer.price,  // Set the fare from the offer
+                    "acceptedAt" to Timestamp.now()
+                )
+            )
+            .await()
+        
+        // Mark the offer as accepted
+        firestore.collection("bookings")
+            .document(bookingId)
+            .collection("offers")
+            .document(offer.id)
+            .update("isAccepted", true)
+            .await()
+        
+        android.util.Log.d("BookingRepo", "Offer accepted from ${offer.driverName} for $${offer.price}")
+    }
+    
+    /**
+     * Rider rejects a driver's offer - price too high
+     * Driver will see this and can submit a new lower offer
+     */
+    suspend fun rejectDriverOffer(bookingId: String, offer: DriverOffer): Result<Unit> = runCatching {
+        android.util.Log.d("BookingRepo", "rejectDriverOffer: bookingId=$bookingId, offerId=${offer.id}, price=${offer.price}")
+        
+        // Mark the offer as rejected
+        firestore.collection("bookings")
+            .document(bookingId)
+            .collection("offers")
+            .document(offer.id)
+            .update(
+                mapOf(
+                    "isRejected" to true,
+                    "rejectedAt" to System.currentTimeMillis()
+                )
+            )
+            .await()
+        
+        android.util.Log.d("BookingRepo", "Offer rejected from ${offer.driverName} - $${offer.price} was too high")
     }
 
     /**
@@ -236,7 +521,7 @@ class BookingRepository @Inject constructor(
     }
     
     /**
-     * Rate a completed trip
+     * Rate a completed trip and update driver's average rating
      */
     suspend fun rateTrip(
         bookingId: String,
@@ -244,6 +529,7 @@ class BookingRepository @Inject constructor(
         review: String? = null,
         isDriverRating: Boolean = false
     ): Result<Unit> = runCatching {
+        // First, save the rating to the booking
         val updates = if (isDriverRating) {
             mapOf(
                 "driverRating" to rating,
@@ -260,6 +546,46 @@ class BookingRepository @Inject constructor(
             .document(bookingId)
             .update(updates)
             .await()
+        
+        // Now update the driver's average rating
+        if (!isDriverRating) {
+            // Get the booking to find the driver ID
+            val booking = firestore.collection("bookings")
+                .document(bookingId)
+                .get()
+                .await()
+                .toObject(Booking::class.java)
+            
+            booking?.driverId?.let { driverId ->
+                // Get all completed bookings for this driver that have a rating
+                val driverBookings = firestore.collection("bookings")
+                    .whereEqualTo("driverId", driverId)
+                    .whereEqualTo("status", "completed")
+                    .get()
+                    .await()
+                    .toObjects(Booking::class.java)
+                
+                // Calculate average rating from bookings with ratings
+                val ratingsWithValues = driverBookings.filter { it.rating != null && it.rating > 0 }
+                if (ratingsWithValues.isNotEmpty()) {
+                    val averageRating = ratingsWithValues.mapNotNull { it.rating }.average().toFloat()
+                    val totalRatings = ratingsWithValues.size
+                    
+                    // Update driver's profile with new average rating and total trips
+                    firestore.collection("users")
+                        .document(driverId)
+                        .update(
+                            mapOf(
+                                "rating" to averageRating,
+                                "totalTrips" to driverBookings.size
+                            )
+                        )
+                        .await()
+                    
+                    android.util.Log.d("BookingRepo", "Updated driver $driverId rating: $averageRating (from $totalRatings ratings)")
+                }
+            }
+        }
     }
     
     /**
@@ -303,6 +629,22 @@ class BookingRepository @Inject constructor(
             .toObjects(Booking::class.java)
             .sortedByDescending { it.requestedAt }
             .take(limit)
+    }
+    
+    /**
+     * Get the most recent completed booking that hasn't been rated yet (for showing rating popup)
+     */
+    suspend fun getUnratedCompletedBooking(): Booking? {
+        val uid = userId ?: return null
+        
+        return firestore.collection("bookings")
+            .whereEqualTo("riderId", uid)
+            .whereEqualTo("status", "completed")
+            .get()
+            .await()
+            .toObjects(Booking::class.java)
+            .filter { it.rating == null || it.rating == 0f }
+            .maxByOrNull { it.completedAt ?: it.requestedAt }
     }
     
     /**
@@ -428,7 +770,7 @@ class BookingRepository @Inject constructor(
                 } ?: emptyList()
                 android.util.Log.d("BookingRepo", "observeAllPendingBookings: ${bookings.size} bookings")
                 bookings.forEach { b ->
-                    android.util.Log.d("BookingRepo", "  - ${b.id}: type=${b.vehicleType}, status=${b.status}, pickup=${b.pickupAddress}")
+                    android.util.Log.d("BookingRepo", "  - ${b.id}: type=${b.vehicleType}, status=${b.status}, pickup=${b.pickupAddress}, FARE=${b.estimatedFare}")
                 }
                 trySend(bookings)
             }
@@ -572,16 +914,23 @@ class BookingRepository @Inject constructor(
     
     /**
      * Rider accepts the driver's adjusted fare
+     * This also changes status to ACCEPTED so the ride can start
      */
     suspend fun acceptFareAdjustment(bookingId: String): Result<Unit> = runCatching {
+        android.util.Log.d("BookingRepo", "acceptFareAdjustment: bookingId=$bookingId - starting ride")
+        
         firestore.collection("bookings")
             .document(bookingId)
             .update(
                 mapOf(
-                    "riderAcceptedAdjustment" to true
+                    "riderAcceptedAdjustment" to true,
+                    "status" to "accepted",
+                    "acceptedAt" to Timestamp.now()
                 )
             )
             .await()
+        
+        android.util.Log.d("BookingRepo", "Fare accepted and ride started!")
     }
     
     /**

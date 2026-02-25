@@ -44,6 +44,13 @@ data class User(
     val vehicleColor: String? = null,       // e.g., "Yellow" or "White/Blue"
     val vehiclePhoto: String? = null,       // Photo URL of vehicle/boat
     
+    // Promo codes / Special perks
+    val hasFreeBookingsForLife: Boolean = false,  // VIP perk: free rides forever
+    val hasFreeAdsForLife: Boolean = false,       // VIP perk: free advertising forever
+    val appliedPromoCode: String? = null,         // The promo code that was applied
+    val promoAppliedAt: Timestamp? = null,        // When the promo was applied
+    val usedFreeFeaturedOffer: Boolean = false,   // Whether user has claimed free 2-week featured ad
+    
     val createdAt: Timestamp = Timestamp.now(),
     val updatedAt: Timestamp = Timestamp.now()
 )

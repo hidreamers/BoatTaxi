@@ -86,7 +86,6 @@ class LocationSearchViewModel @Inject constructor(
         PlaceResult("bocas_18", "Salt Creek", "Isla Bastimentos", "Salt Creek Village, Isla Bastimentos, Bocas del Toro, Panama"),
         
         // Bocas Hotels & Resorts
-        PlaceResult("bocas_h1", "Playa Tortuga Hotel", "Bocas Town, Bocas del Toro", "Playa Tortuga Hotel & Beach Resort, Bocas Town, Panama"),
         PlaceResult("bocas_h2", "Hotel Bocas del Toro", "Bocas Town", "Hotel & Restaurant Bocas del Toro, Bocas Town, Panama"),
         PlaceResult("bocas_h3", "Tropical Suites", "Bocas Town", "Tropical Suites Hotel, Bocas Town, Bocas del Toro, Panama"),
         PlaceResult("bocas_h4", "Red Frog Beach Resort", "Isla Bastimentos", "Red Frog Beach Island Resort, Isla Bastimentos, Panama"),

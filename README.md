@@ -1,6 +1,6 @@
 # BoatTaxie Backend API
 
-Backend server for processing Stripe payments in the BoatTaxie Android app.
+Backend server for processing Google Play In-App Purchases in the BoatTaxie Android app.
 
 ## Setup
 
@@ -13,12 +13,12 @@ Backend server for processing Stripe payments in the BoatTaxie Android app.
    ```bash
    cp .env.example .env
    ```
-   Edit `.env` and add your Stripe secret key.
+   Edit `.env` and configure Firebase credentials.
 
-3. **Get your Stripe keys:**
-   - Go to [Stripe Dashboard](https://dashboard.stripe.com/apikeys)
-   - Copy your **Secret key** (starts with `sk_test_` for test mode)
-   - Add it to your `.env` file as `STRIPE_SECRET_KEY`
+3. **Set up Firebase:**
+   - Go to [Firebase Console](https://console.firebase.google.com/)
+   - Select your project → Project Settings → Service Accounts
+   - Generate new private key and save as `firebase-service-account.json`
 
 4. **Start the server:**
    ```bash
@@ -31,28 +31,57 @@ Backend server for processing Stripe payments in the BoatTaxie Android app.
 
 ## API Endpoints
 
-### Create Payment Intent
-**POST** `/api/create-payment-intent`
+### Verify Subscription Purchase
+**POST** `/api/verify-subscription-purchase`
 
-Creates a Stripe PaymentIntent for subscription payments.
+Verifies a Google Play subscription purchase and activates it.
 
 **Request Body:**
 ```json
 {
-  "planId": "MONTHLY",
-  "currency": "usd"
+  "purchaseToken": "purchase_token_from_google_play",
+  "orderId": "GPA.xxx",
+  "productId": "week_pass",
+  "userId": "firebase_user_id",
+  "planId": "WEEK_PASS"
 }
 ```
 
 **Response:**
 ```json
 {
-  "clientSecret": "pi_xxx_secret_xxx",
-  "amount": 5000,
-  "currency": "usd",
-  "planName": "Monthly"
+  "success": true,
+  "subscriptionId": "subscription_doc_id",
+  "message": "Subscription activated successfully"
 }
 ```
+
+### Verify Ad Purchase
+**POST** `/api/verify-ad-purchase`
+
+Verifies a Google Play ad purchase and activates the ad.
+
+**Request Body:**
+```json
+{
+  "purchaseToken": "purchase_token_from_google_play",
+  "orderId": "GPA.xxx",
+  "productId": "ad_standard_7day",
+  "adId": "firebase_ad_id",
+  "durationDays": 7,
+  "amountPaid": 1999
+}
+```
+
+### Create Draft Ad
+**POST** `/api/create-draft-ad`
+
+Creates a draft ad pending payment via Google Play IAP.
+
+### Get IAP Products
+**GET** `/api/iap-products`
+
+Returns available subscription plans and ad pricing.
 
 ### Health Check
 **GET** `/api/health`
@@ -61,17 +90,30 @@ Returns server status.
 
 ## Subscription Plans
 
-- `DAY_PASS`: $5.00 (500 cents)
-- `WEEKLY`: $20.00 (2000 cents)
-- `MONTHLY`: $50.00 (5000 cents)
-- `YEARLY`: $500.00 (50000 cents)
+- `DAY_PASS`: $1.99 (199 cents) - 1 day
+- `THREE_DAY_PASS`: $4.99 (499 cents) - 3 days
+- `FIVE_DAY_PASS`: $7.99 (799 cents) - 5 days
+- `WEEK_PASS`: $9.99 (999 cents) - 7 days
+- `TWO_WEEK_PASS`: $17.99 (1799 cents) - 14 days
+- `MONTH_PASS`: $29.99 (2999 cents) - 30 days
+
+## Google Play Console Setup
+
+### 1. Create In-App Products
+
+In Google Play Console:
+1. Go to your app → Monetise → Products → In-app products
+2. Create products with these IDs:
+   - `day_pass`, `three_day_pass`, `five_day_pass`, etc.
+   - `ad_standard_1day`, `ad_standard_7day`, `ad_featured_7day`, etc.
+3. Set pricing for each product
+4. Activate the products
+
+### 2. Configure Play Billing Library
+
+The Android app uses `com.android.billingclient:billing-ktx:6.1.0` for purchases.
 
 ## Deployment
-
-### For Development
-```bash
-npm run dev
-```
 
 ### For Production
 Consider using services like:
@@ -84,98 +126,19 @@ Consider using services like:
 Make sure to:
 1. Set environment variables in your deployment platform
 2. Use HTTPS in production
-3. Set up Stripe webhooks for payment confirmations
+3. Configure Firebase service account credentials
 
 ## Android App Integration
 
-Update your Android app to call this backend API instead of simulating payments. Modify the `createPaymentIntent` function in `SubscriptionViewModel.kt` to make a real HTTP request to your backend.
+The Android app handles purchases through `BillingManager.kt`:
 
-Example:
-```kotlin
-// Replace the mock implementation with real API call
-private suspend fun createPaymentIntent(plan: SubscriptionPlan): Result<String> {
-    return try {
-        val response = httpClient.post("https://your-backend-url.com/api/create-payment-intent") {
-            contentType(ContentType.Application.Json)
-            setBody(Json.encodeToString(mapOf(
-                "planId" to plan.name,
-                "currency" to "usd"
-            )))
-        }
+1. User selects a subscription plan
+2. App launches Google Play purchase flow
+3. On successful purchase, app calls `/api/verify-subscription-purchase`
+4. Backend verifies and activates subscription in Firestore
 
-        if (response.status.isSuccess()) {
-            val responseBody = Json.decodeFromString<PaymentIntentResponse>(response.bodyAsText())
-            Result.success(responseBody.clientSecret)
-        } else {
-            Result.failure(Exception("Failed to create payment intent"))
-        }
-    } catch (e: Exception) {
-        Result.failure(e)
-    }
-}
-```
+## Security Notes
 
-## Stripe Webhook Setup
-
-Webhooks allow Stripe to notify your server when payment events occur, enabling automatic subscription activation.
-
-### 1. Set up Firebase Service Account
-
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Select your project → Project Settings → Service Accounts
-3. Click "Generate new private key"
-4. Download the JSON file and save it as `firebase-service-account.json` in the backend directory
-
-### 2. Configure Environment Variables
-
-Add these to your `.env` file:
-```env
-STRIPE_WEBHOOK_SECRET=whsec_...
-FIREBASE_DATABASE_URL=https://your-project.firebaseio.com
-```
-
-### 3. Set up Webhook in Stripe Dashboard
-
-1. Go to [Stripe Dashboard](https://dashboard.stripe.com/webhooks)
-2. Click "Add endpoint"
-3. Set Endpoint URL to: `https://your-domain.com/api/webhooks`
-4. Select events to listen for:
-   - `checkout.session.completed` (for payment link completions)
-   - `invoice.payment_succeeded` (for recurring payments)
-   - `invoice.payment_failed` (for failed payments)
-   - `customer.subscription.deleted` (for cancellations)
-5. Copy the **Webhook signing secret** and add it to your `.env` as `STRIPE_WEBHOOK_SECRET`
-
-### 4. Configure Payment Links with Metadata
-
-When creating payment links in Stripe Dashboard:
-
-1. Go to [Stripe Products](https://dashboard.stripe.com/products)
-2. Create/Edit your subscription products
-3. Add metadata to identify plans:
-   - `planId`: `DAY_PASS`, `THREE_DAY_PASS`, etc.
-4. For user identification, you can:
-   - Add user ID as URL parameter: `?client_reference_id=user123`
-   - Or use Stripe Customer IDs if you create customers
-
-### 5. Test Webhook Locally (Optional)
-
-For local development, use Stripe CLI:
-
-```bash
-# Install Stripe CLI
-# Then login and forward webhooks
-stripe login
-stripe listen --forward-to localhost:3000/api/webhooks
-```
-
-### 6. Update Android App
-
-The webhook will automatically activate subscriptions when payments succeed. You can remove the manual payment checking logic from `SubscriptionViewModel.kt` since the webhook handles this server-side.
-
-### Webhook Events Handled
-
-- **`checkout.session.completed`**: Activates user subscription in Firestore
-- **`invoice.payment_succeeded`**: Handles recurring subscription payments
-- **`invoice.payment_failed`**: Handles failed recurring payments
-- **`customer.subscription.deleted`**: Deactivates canceled subscriptions
+- In production, verify purchase tokens with Google Play Developer API
+- Store Firebase service account credentials securely
+- Never expose sensitive keys in client-side code

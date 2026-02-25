@@ -28,6 +28,14 @@ import com.boattaxie.app.data.model.VehicleType
 import com.boattaxie.app.data.model.DocumentType
 import com.boattaxie.app.ui.theme.*
 
+// Tab filter options
+enum class VerificationFilter(val label: String) {
+    ALL("All"),
+    PENDING("Pending"),
+    APPROVED("Approved"),
+    REJECTED("Rejected")
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminVerificationScreen(
@@ -36,6 +44,7 @@ fun AdminVerificationScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var selectedFilter by remember { mutableStateOf(VerificationFilter.ALL) }
     
     // Load submissions on first composition
     LaunchedEffect(Unit) {
@@ -74,22 +83,74 @@ fun AdminVerificationScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // Stats header
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Primary.copy(alpha = 0.1f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    StatItem("Pending", uiState.pendingCount, Color(0xFFFF9800))
+                    StatItem("Approved", uiState.approvedCount, Success)
+                    StatItem("Rejected", uiState.rejectedCount, Color(0xFFD32F2F))
+                }
+            }
+            
+            // Filter tabs
+            ScrollableTabRow(
+                selectedTabIndex = selectedFilter.ordinal,
+                modifier = Modifier.fillMaxWidth(),
+                edgePadding = 16.dp
+            ) {
+                VerificationFilter.values().forEach { filter ->
+                    val count = when (filter) {
+                        VerificationFilter.ALL -> uiState.submissions.size
+                        VerificationFilter.PENDING -> uiState.pendingCount
+                        VerificationFilter.APPROVED -> uiState.approvedCount
+                        VerificationFilter.REJECTED -> uiState.rejectedCount
+                    }
+                    Tab(
+                        selected = selectedFilter == filter,
+                        onClick = { selectedFilter = filter },
+                        text = { Text("${filter.label} ($count)") }
+                    )
+                }
+            }
+            
             if (uiState.isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center)
-                )
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
             } else {
-                // Filter to show pending first
-                val pendingSubmissions = uiState.submissions.filter { 
-                    it.overallStatus == VerificationStatus.PENDING || it.status == "pending"
+                // Filter submissions based on selected tab
+                val filteredSubmissions = when (selectedFilter) {
+                    VerificationFilter.ALL -> uiState.submissions
+                    VerificationFilter.PENDING -> uiState.submissions.filter { 
+                        it.status == "pending" || it.overallStatus == VerificationStatus.PENDING 
+                    }
+                    VerificationFilter.APPROVED -> uiState.submissions.filter { 
+                        it.status == "approved" || it.overallStatus == VerificationStatus.APPROVED 
+                    }
+                    VerificationFilter.REJECTED -> uiState.submissions.filter { 
+                        it.status == "rejected" || it.overallStatus == VerificationStatus.REJECTED 
+                    }
                 }
                 
-                if (pendingSubmissions.isEmpty()) {
+                if (filteredSubmissions.isEmpty()) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -97,38 +158,31 @@ fun AdminVerificationScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text("✅", fontSize = 64.sp)
+                        val emoji = when (selectedFilter) {
+                            VerificationFilter.ALL -> "📋"
+                            VerificationFilter.PENDING -> "⏳"
+                            VerificationFilter.APPROVED -> "✅"
+                            VerificationFilter.REJECTED -> "❌"
+                        }
+                        Text(emoji, fontSize = 64.sp)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No Pending Verifications",
+                            text = "No ${selectedFilter.label} Verifications",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
                         )
                         Text(
-                            text = "All driver verifications have been processed",
+                            text = when (selectedFilter) {
+                                VerificationFilter.ALL -> "No driver verifications submitted yet"
+                                VerificationFilter.PENDING -> "All verifications have been processed"
+                                VerificationFilter.APPROVED -> "No approved drivers yet"
+                                VerificationFilter.REJECTED -> "No rejected submissions"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary,
                             textAlign = TextAlign.Center
                         )
-                        
-                        // Stats
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Surface)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceEvenly
-                            ) {
-                                StatItem("Pending", uiState.pendingCount, Color(0xFFFF9800))
-                                StatItem("Approved", uiState.approvedCount, Success)
-                                StatItem("Rejected", uiState.rejectedCount, Color(0xFFD32F2F))
-                            }
-                        }
                     }
                 } else {
                     LazyColumn(
@@ -136,31 +190,14 @@ fun AdminVerificationScreen(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Stats header
-                        item {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = Primary.copy(alpha = 0.1f))
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    horizontalArrangement = Arrangement.SpaceEvenly
-                                ) {
-                                    StatItem("Pending", uiState.pendingCount, Color(0xFFFF9800))
-                                    StatItem("Approved", uiState.approvedCount, Success)
-                                    StatItem("Rejected", uiState.rejectedCount, Color(0xFFD32F2F))
-                                }
-                            }
-                        }
-                        
-                        items(pendingSubmissions) { submission ->
+                        items(filteredSubmissions) { submission ->
                             VerificationCard(
                                 submission = submission,
                                 isProcessing = uiState.isLoading,
+                                showActions = submission.status == "pending" || submission.overallStatus == VerificationStatus.PENDING,
                                 onApprove = { viewModel.approveSubmission(submission.id) },
-                                onReject = { reason -> viewModel.rejectSubmission(submission.id, reason) }
+                                onReject = { reason -> viewModel.rejectSubmission(submission.id, reason) },
+                                onDelete = { viewModel.deleteUserAndSubmission(submission.id, submission.userId) }
                             )
                         }
                     }
@@ -193,10 +230,13 @@ private fun StatItem(label: String, count: Int, color: Color) {
 private fun VerificationCard(
     submission: VerificationSubmission,
     isProcessing: Boolean,
+    showActions: Boolean = true,
     onApprove: () -> Unit,
-    onReject: (String) -> Unit
+    onReject: (String) -> Unit,
+    onDelete: () -> Unit
 ) {
     var showRejectDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
     var rejectReason by remember { mutableStateOf("") }
     var selectedImageUrl by remember { mutableStateOf<String?>(null) }
     
@@ -362,8 +402,60 @@ private fun VerificationCard(
                 )
             }
             
+            // Show rejection reason for rejected submissions
+            if (submission.overallStatus == VerificationStatus.REJECTED && !submission.adminNotes.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = Color(0xFFD32F2F).copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text("❌", fontSize = 16.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Rejection Reason:",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFD32F2F)
+                            )
+                            Text(
+                                text = submission.adminNotes,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextPrimary
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Show reviewed time for processed submissions
+            if (submission.reviewedAt != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        null,
+                        tint = if (submission.overallStatus == VerificationStatus.APPROVED) Success else Color(0xFFD32F2F),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Reviewed: ${formatTimestamp(submission.reviewedAt)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+            }
+            
             // Only show action buttons for pending
-            if (submission.overallStatus == VerificationStatus.PENDING) {
+            if (showActions && submission.overallStatus == VerificationStatus.PENDING) {
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // Action buttons
@@ -408,7 +500,71 @@ private fun VerificationCard(
                     }
                 }
             }
+            
+            // Delete button - always show for admin
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { showDeleteDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isProcessing,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color(0xFF9E9E9E)
+                )
+            ) {
+                Icon(Icons.Default.Delete, null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Delete User")
+            }
         }
+    }
+    
+    // Delete confirmation dialog
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            icon = { Icon(Icons.Default.DeleteForever, null, tint = Color(0xFFD32F2F)) },
+            title = { Text("Delete User?") },
+            text = {
+                Column {
+                    Text(
+                        "Are you sure you want to permanently delete this user?",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "User: ${submission.userName}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Email: ${submission.userEmail}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "⚠️ This will delete:\n• User account\n• Verification documents\n• All bookings\n\nThis action cannot be undone!",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFD32F2F)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete()
+                        showDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
     
     // Reject dialog

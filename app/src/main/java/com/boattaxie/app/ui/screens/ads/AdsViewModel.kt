@@ -1,17 +1,24 @@
 package com.boattaxie.app.ui.screens.ads
 
+import android.app.Application
 import android.net.Uri
+import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.boattaxie.app.data.model.*
 import com.boattaxie.app.data.payment.PaymentManager
 import com.boattaxie.app.data.repository.AdvertisementRepository
+import com.boattaxie.app.data.repository.AuthRepository
 import com.boattaxie.app.data.repository.PlaceResult
 import com.boattaxie.app.data.repository.PlacesRepository
+import com.boattaxie.app.data.repository.SubscriptionRepository
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.net.URL
 import javax.inject.Inject
 
 data class AdsUiState(
@@ -24,7 +31,20 @@ data class AdsUiState(
     val errorMessage: String? = null,
     // Location search state
     val locationSearchResults: List<PlaceResult> = emptyList(),
-    val isSearchingLocation: Boolean = false
+    val isSearchingLocation: Boolean = false,
+    // Promo code state
+    val promoCodeMessage: String? = null,
+    val promoCodeSuccess: Boolean = false,
+    val isApplyingPromo: Boolean = false,
+    val hasFreeAdsForLife: Boolean = false,
+    // Free featured offer state (one-time per user)
+    val usedFreeFeaturedOffer: Boolean = true, // Default true to prevent showing until checked
+    val isClaimingFreeOffer: Boolean = false,
+    val freeOfferClaimSuccess: Boolean = false,
+    val freeOfferMessage: String? = null,
+    // Ride subscription status
+    val hasActiveSubscription: Boolean = false,
+    val subscription: Subscription? = null
 )
 
 @HiltViewModel
@@ -32,7 +52,10 @@ class AdsViewModel @Inject constructor(
     private val advertisementRepository: AdvertisementRepository,
     private val placesRepository: PlacesRepository,
     val paymentManager: PaymentManager,
-    private val auth: FirebaseAuth
+    private val auth: FirebaseAuth,
+    private val authRepository: AuthRepository,
+    private val subscriptionRepository: SubscriptionRepository,
+    private val application: Application
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(AdsUiState())
@@ -44,6 +67,171 @@ class AdsViewModel @Inject constructor(
     
     init {
         loadAdvertisements()
+        checkFreeAdsStatus()
+        checkFreeFeaturedOfferStatus()
+        observeSubscription()
+        paymentManager.initialize()
+    }
+    
+    private fun observeSubscription() {
+        viewModelScope.launch {
+            subscriptionRepository.observeSubscription().collect { subscription ->
+                _uiState.update { 
+                    it.copy(
+                        hasActiveSubscription = subscription != null && 
+                            SubscriptionHelper.isSubscriptionActive(subscription),
+                        subscription = subscription
+                    )
+                }
+            }
+        }
+    }
+    
+    private fun checkFreeAdsStatus() {
+        viewModelScope.launch {
+            val hasFreeAds = authRepository.hasFreeAdsForLife()
+            _uiState.update { it.copy(hasFreeAdsForLife = hasFreeAds) }
+        }
+    }
+    
+    private fun checkFreeFeaturedOfferStatus() {
+        viewModelScope.launch {
+            val hasUsed = authRepository.hasUsedFreeFeaturedOffer()
+            _uiState.update { it.copy(usedFreeFeaturedOffer = hasUsed) }
+        }
+    }
+    
+    /**
+     * Claim the one-time free 2-week featured ad offer
+     */
+    fun claimFreeFeaturedOffer(
+        businessName: String,
+        title: String,
+        description: String,
+        imageUri: Uri?,
+        logoUri: Uri?,
+        websiteUrl: String?,
+        phoneNumber: String?,
+        email: String?,
+        location: GeoLocation?,
+        locationName: String?,
+        category: AdCategory,
+        hasCoupon: Boolean,
+        couponCode: String?,
+        couponDiscount: String?,
+        couponDescription: String?,
+        couponMaxRedemptions: Int?,
+        onSuccess: () -> Unit
+    ) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isClaimingFreeOffer = true, freeOfferMessage = null) }
+            
+            try {
+                val userId = auth.currentUser?.uid
+                if (userId == null) {
+                    _uiState.update { 
+                        it.copy(
+                            isClaimingFreeOffer = false, 
+                            freeOfferMessage = "Please sign in to claim your free offer"
+                        ) 
+                    }
+                    return@launch
+                }
+                
+                // Atomically claim the offer (prevents double-claiming via transaction)
+                val claimed = authRepository.claimFreeFeaturedOffer()
+                if (!claimed) {
+                    _uiState.update { 
+                        it.copy(
+                            isClaimingFreeOffer = false, 
+                            freeOfferMessage = "You have already used your free offer",
+                            usedFreeFeaturedOffer = true
+                        ) 
+                    }
+                    return@launch
+                }
+                
+                // Create the free featured ad using repository (handles image uploads)
+                android.util.Log.d("AdsViewModel", "Creating free featured ad...")
+                val result = advertisementRepository.createAdvertisement(
+                    businessName = businessName,
+                    title = title,
+                    description = description,
+                    imageUri = imageUri,
+                    logoUri = logoUri,
+                    websiteUrl = websiteUrl,
+                    phoneNumber = phoneNumber,
+                    email = email,
+                    location = location,
+                    locationName = locationName,
+                    category = category,
+                    targetAudience = AdTargetAudience.ALL,
+                    plan = AdPlan.TWO_WEEKS, // Free 2-week plan
+                    isFeatured = true,
+                    hasCoupon = hasCoupon,
+                    couponCode = couponCode,
+                    couponDiscount = couponDiscount,
+                    couponDescription = couponDescription,
+                    couponMaxRedemptions = couponMaxRedemptions
+                )
+                
+                android.util.Log.d("AdsViewModel", "createAdvertisement returned, processing result...")
+                result.fold(
+                    onSuccess = { ad ->
+                        android.util.Log.d("AdsViewModel", "Ad created successfully: ${ad.id}, now activating...")
+                        // Activate the ad immediately since it's free
+                        val activationResult = advertisementRepository.activateAdvertisement(ad.id)
+                        android.util.Log.d("AdsViewModel", "activateAdvertisement returned, processing...")
+                        activationResult.fold(
+                            onSuccess = {
+                                android.util.Log.d("AdsViewModel", "Ad activation SUCCESS!")
+                                _uiState.update { 
+                                    it.copy(
+                                        isClaimingFreeOffer = false, 
+                                        freeOfferClaimSuccess = true,
+                                        usedFreeFeaturedOffer = true,
+                                        freeOfferMessage = "🎉 Your free featured ad is now live for 2 weeks!",
+                                        adCreated = true
+                                    ) 
+                                }
+                                onSuccess()
+                            },
+                            onFailure = { e ->
+                                // Ad created but activation failed - still show success
+                                android.util.Log.e("AdsViewModel", "Ad activation failed: ${e.message}")
+                                _uiState.update { 
+                                    it.copy(
+                                        isClaimingFreeOffer = false, 
+                                        freeOfferClaimSuccess = true,
+                                        usedFreeFeaturedOffer = true,
+                                        freeOfferMessage = "Ad created! Activation in progress...",
+                                        adCreated = true
+                                    ) 
+                                }
+                                onSuccess()
+                            }
+                        )
+                    },
+                    onFailure = { e ->
+                        android.util.Log.e("AdsViewModel", "createAdvertisement FAILED: ${e.message}", e)
+                        _uiState.update { 
+                            it.copy(
+                                isClaimingFreeOffer = false, 
+                                freeOfferMessage = "Failed to create ad: ${e.message}"
+                            ) 
+                        }
+                    }
+                )
+                
+            } catch (e: Exception) {
+                _uiState.update { 
+                    it.copy(
+                        isClaimingFreeOffer = false, 
+                        freeOfferMessage = "Failed to claim offer: ${e.message}"
+                    ) 
+                }
+            }
+        }
     }
     
     private fun loadAdvertisements() {
@@ -315,6 +503,7 @@ class AdsViewModel @Inject constructor(
         imageUri: Uri?,
         logoUri: Uri? = null,
         youtubeUrl: String? = null,
+        videoUrl: String? = null,
         phone: String?,
         email: String?,
         website: String?,
@@ -331,6 +520,7 @@ class AdsViewModel @Inject constructor(
     ) {
         android.util.Log.d("AdsVM", "Creating ad: $businessName - $title")
         android.util.Log.d("AdsVM", "Location: $locationName, Category: $category, Plan: $plan")
+        android.util.Log.d("AdsVM", "Video URL: $videoUrl, YouTube: $youtubeUrl")
         
         viewModelScope.launch {
             _uiState.update { it.copy(isCreating = true, errorMessage = null) }
@@ -343,6 +533,7 @@ class AdsViewModel @Inject constructor(
                     imageUri = imageUri,
                     logoUri = logoUri,
                     youtubeUrl = youtubeUrl,
+                    videoUrl = videoUrl,
                     websiteUrl = website,
                     phoneNumber = phone,
                     email = email,
@@ -417,8 +608,22 @@ class AdsViewModel @Inject constructor(
     
     fun deleteAd(adId: String) {
         viewModelScope.launch {
-            advertisementRepository.deleteAdvertisement(adId)
-            loadMyAds()
+            _uiState.update { it.copy(isLoading = true) }
+            val result = advertisementRepository.deleteAdvertisement(adId)
+            result.fold(
+                onSuccess = {
+                    android.util.Log.d("AdsVM", "Ad deleted successfully: $adId")
+                    // Refresh the ads list after successful deletion
+                    loadMyAds()
+                },
+                onFailure = { e ->
+                    android.util.Log.e("AdsVM", "Failed to delete ad: ${e.message}", e)
+                    _uiState.update { it.copy(
+                        isLoading = false,
+                        errorMessage = "Failed to delete ad: ${e.message}"
+                    ) }
+                }
+            )
         }
     }
     
@@ -524,5 +729,74 @@ class AdsViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = false) }
             }
         }
+    }
+    
+    /**
+     * Apply ads promo code with anti-abuse protection
+     * Uses AuthRepository for device/IP/phone tracking
+     */
+    fun applyAdsPromoCode(code: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isApplyingPromo = true, promoCodeMessage = null) }
+            
+            try {
+                // Get device ID
+                val deviceId = try {
+                    Settings.Secure.getString(application.contentResolver, Settings.Secure.ANDROID_ID)
+                } catch (e: Exception) {
+                    null
+                }
+                
+                // Get IP address
+                val ipAddress = withContext(Dispatchers.IO) {
+                    try {
+                        URL("https://api.ipify.org").readText().trim()
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                
+                android.util.Log.d("AdsVM", "Applying ads promo code: $code")
+                android.util.Log.d("AdsVM", "Device ID: $deviceId, IP: $ipAddress")
+                
+                val result = authRepository.applyPromoCode(code, deviceId, ipAddress)
+                result.fold(
+                    onSuccess = { message ->
+                        android.util.Log.d("AdsVM", "Promo SUCCESS: $message")
+                        _uiState.update { 
+                            it.copy(
+                                isApplyingPromo = false,
+                                promoCodeMessage = message,
+                                promoCodeSuccess = true,
+                                hasFreeAdsForLife = true
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        android.util.Log.e("AdsVM", "Promo FAILED: ${error.message}")
+                        _uiState.update {
+                            it.copy(
+                                isApplyingPromo = false,
+                                promoCodeMessage = error.message ?: "Invalid promo code",
+                                promoCodeSuccess = false
+                            )
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("AdsVM", "Promo EXCEPTION: ${e.message}", e)
+                _uiState.update {
+                    it.copy(
+                        isApplyingPromo = false,
+                        promoCodeMessage = "Error: ${e.message}",
+                        promoCodeSuccess = false
+                    )
+                }
+            }
+        }
+    }
+    
+    fun clearPromoMessage() {
+        _uiState.update { it.copy(promoCodeMessage = null) }
     }
 }

@@ -18,6 +18,8 @@ import com.boattaxie.app.ui.screens.ads.*
 import com.boattaxie.app.ui.screens.profile.*
 import com.boattaxie.app.ui.screens.booking.*
 import com.boattaxie.app.ui.screens.driver.*
+import com.boattaxie.app.ui.screens.explore.*
+import com.boattaxie.app.ui.screens.onboarding.*
 
 @Composable
 fun BoatTaxieNavHost(
@@ -57,6 +59,21 @@ fun BoatTaxieNavHost(
                 onNavigateToVerification = {
                     navController.navigate(Screen.VerificationStatus.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                },
+                onNavigateToOnboarding = {
+                    navController.navigate(Screen.Onboarding.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+        
+        composable(Screen.Onboarding.route) {
+            OnboardingScreen(
+                onComplete = {
+                    navController.navigate(Screen.Welcome.route) {
+                        popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
                 }
             )
@@ -158,6 +175,11 @@ fun BoatTaxieNavHost(
                 },
                 onNavigateToVerification = { vehicleType ->
                     navController.navigate(Screen.Verification.createRoute(vehicleType))
+                },
+                onNavigateToHome = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.VerificationStatus.route) { inclusive = true }
+                    }
                 }
             )
         }
@@ -168,10 +190,11 @@ fun BoatTaxieNavHost(
                 onNavigateToBookRide = { vehicleType ->
                     navController.navigate(Screen.BookRide.createRoute(vehicleType))
                 },
-                onNavigateToSubscription = { navController.navigate(Screen.Subscription.route) },
+                onNavigateToSubscription = { navController.navigate(Screen.SubscriptionPlans.route) },
                 onNavigateToAds = { navController.navigate(Screen.Advertisements.route) },
                 onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                 onNavigateToTripHistory = { navController.navigate(Screen.TripHistory.route) },
+                onNavigateToExplore = { navController.navigate(Screen.Explore.route) },
                 onNavigateToDriverMode = {
                     navController.navigate(Screen.DriverHome.route) {
                         launchSingleTop = true
@@ -179,6 +202,9 @@ fun BoatTaxieNavHost(
                 },
                 onNavigateToDriverVerification = {
                     navController.navigate(Screen.VerificationStatus.route)
+                },
+                onNavigateToRateRide = { bookingId ->
+                    navController.navigate(Screen.RideComplete.createRoute(bookingId))
                 }
             )
         }
@@ -241,7 +267,10 @@ fun BoatTaxieNavHost(
                     savedStateHandle.remove<Boolean>("isPickup")
                 },
                 requestDriverId = requestDriverId,
-                requestDriverName = requestDriverName
+                requestDriverName = requestDriverName,
+                onNavigateToRateRide = { bookingId ->
+                    navController.navigate(Screen.RideComplete.createRoute(bookingId))
+                }
             )
         }
         
@@ -479,6 +508,38 @@ fun BoatTaxieNavHost(
             )
         }
         
+        // Explore screen - Real-time places discovery
+        composable(Screen.Explore.route) {
+            ExploreScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToBookBoat = {
+                    navController.navigate(Screen.BookRide.createRoute("boat")) {
+                        launchSingleTop = true
+                    }
+                },
+                onNavigateToBookTaxi = {
+                    navController.navigate(Screen.BookRide.createRoute("taxi")) {
+                        launchSingleTop = true
+                    }
+                },
+                onNavigateToBookRide = { placeId, placeName, lat, lng ->
+                    // Navigate to book ride with destination pre-set
+                    // Store destination in savedStateHandle
+                    navController.navigate(Screen.BookRide.createRoute("boat")) {
+                        launchSingleTop = true
+                    }
+                    // Set the destination after navigation
+                    navController.currentBackStackEntry?.savedStateHandle?.apply {
+                        set("selectedAddress", placeName)
+                        set("selectedPlaceId", placeId)
+                        set("isPickup", false) // This is a destination
+                        set("destinationLat", lat)
+                        set("destinationLng", lng)
+                    }
+                }
+            )
+        }
+        
         // Profile screens
         composable(Screen.Profile.route) {
             ProfileScreen(
@@ -489,6 +550,7 @@ fun BoatTaxieNavHost(
                 onNavigateToHelp = { navController.navigate(Screen.Help.route) },
                 onNavigateToAbout = { navController.navigate(Screen.About.route) },
                 onNavigateToAdminVerifications = { navController.navigate(Screen.AdminVerifications.route) },
+                onNavigateToAdminDockLocations = { navController.navigate(Screen.AdminDockLocations.route) },
                 onSignOut = {
                     navController.navigate(Screen.Welcome.route) {
                         popUpTo(0) { inclusive = true }
@@ -547,6 +609,12 @@ fun BoatTaxieNavHost(
         // Admin screens
         composable(Screen.AdminVerifications.route) {
             com.boattaxie.app.ui.screens.admin.AdminVerificationScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        composable(Screen.AdminDockLocations.route) {
+            com.boattaxie.app.ui.screens.admin.AdminDockLocationsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

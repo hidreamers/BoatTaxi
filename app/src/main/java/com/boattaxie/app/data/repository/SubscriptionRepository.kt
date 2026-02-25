@@ -5,9 +5,12 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import javax.inject.Inject
@@ -107,19 +110,58 @@ class SubscriptionRepository @Inject constructor(
         
         val listener = firestore.collection("subscriptions")
             .whereEqualTo("userId", uid)
-            .whereEqualTo("status", SubscriptionStatus.ACTIVE)
+            .whereEqualTo("status", "active")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     trySend(null)
                     return@addSnapshotListener
                 }
                 
-                val subscription = snapshot?.toObjects(Subscription::class.java)
-                    ?.sortedByDescending { it.endDate }
-                    ?.firstOrNull()
+                // Manually deserialize to handle documents with "id" field
+                val subscription = try {
+                    snapshot?.documents?.mapNotNull { doc ->
+                        try {
+                            // Create subscription manually to avoid @DocumentId conflict
+                            val planName = doc.getString("plan") ?: return@mapNotNull null
+                            val plan = try {
+                                SubscriptionPlan.valueOf(planName)
+                            } catch (e: Exception) {
+                                SubscriptionPlan.DAY_PASS
+                            }
+                            
+                            Subscription(
+                                id = doc.id,
+                                userId = doc.getString("userId") ?: "",
+                                plan = plan,
+                                status = SubscriptionStatus.ACTIVE,
+                                startDate = doc.getTimestamp("startDate") ?: Timestamp.now(),
+                                endDate = doc.getTimestamp("endDate") ?: Timestamp.now(),
+                                autoRenew = doc.getBoolean("autoRenew") ?: false,
+                                paymentMethodId = doc.getString("paymentMethodId"),
+                                paypalOrderId = doc.getString("paypalOrderId"),
+                                price = doc.getDouble("price") ?: 0.0,
+                                currency = doc.getString("currency") ?: "USD",
+                                createdAt = doc.getTimestamp("createdAt") ?: Timestamp.now(),
+                                updatedAt = doc.getTimestamp("updatedAt") ?: Timestamp.now()
+                            )
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }?.sortedByDescending { it.endDate }?.firstOrNull()
+                } catch (e: Exception) {
+                    null
+                }
                 
-                // Validate subscription
+                // Validate subscription - if expired, mark it in database
                 if (subscription != null && !SubscriptionHelper.isSubscriptionActive(subscription)) {
+                    // Expire in database asynchronously
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            expireSubscriptionById(subscription.id)
+                        } catch (e: Exception) {
+                            android.util.Log.e("SubscriptionRepo", "Failed to expire subscription: ${e.message}")
+                        }
+                    }
                     trySend(null)
                 } else {
                     trySend(subscription)
@@ -127,6 +169,31 @@ class SubscriptionRepository @Inject constructor(
             }
         
         awaitClose { listener.remove() }
+    }
+    
+    /**
+     * Expire a subscription by ID - called when subscription end date has passed
+     */
+    private suspend fun expireSubscriptionById(subscriptionId: String) {
+        android.util.Log.d("SubscriptionRepo", "Expiring subscription: $subscriptionId")
+        firestore.collection("subscriptions")
+            .document(subscriptionId)
+            .update(
+                mapOf(
+                    "status" to "expired",
+                    "updatedAt" to Timestamp.now()
+                )
+            )
+            .await()
+        
+        // Update user's subscription status
+        userId?.let { uid ->
+            firestore.collection("users")
+                .document(uid)
+                .update("hasActiveSubscription", false)
+                .await()
+        }
+        android.util.Log.d("SubscriptionRepo", "Subscription expired successfully")
     }
     
     /**

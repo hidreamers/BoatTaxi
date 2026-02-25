@@ -6,7 +6,7 @@ import com.google.firebase.firestore.PropertyName
 
 /**
  * Subscription model for rider access
- * Riders pay $2.99/day or choose longer plans for discounts
+ * Riders pay $1.99/day or choose longer plans for discounts
  */
 data class Subscription(
     @DocumentId
@@ -30,7 +30,8 @@ enum class SubscriptionPlan(
     val days: Int,
     val price: Double,
     val pricePerDay: Double,
-    val originalPrice: Double // For showing strikethrough savings
+    val originalPrice: Double, // For showing strikethrough savings
+    val isAutoRenew: Boolean = false
 ) {
     @PropertyName("day_pass")
     DAY_PASS("1 Day", 1, 1.99, 1.99, 1.99),
@@ -48,7 +49,10 @@ enum class SubscriptionPlan(
     TWO_WEEK_PASS("2 Weeks", 14, 14.99, 1.07, 27.86), // Save 46%
     
     @PropertyName("month_pass")
-    MONTH_PASS("1 Month", 30, 24.99, 0.83, 59.70);  // Save 58%
+    MONTH_PASS("1 Month", 30, 24.99, 0.83, 59.70),  // Save 58%
+    
+    @PropertyName("month_pass_auto")
+    MONTH_PASS_AUTO("1 Month (Auto-Renew)", 30, 24.99, 0.83, 59.70, true);  // Auto-renewing subscription
 
     fun getSavingsPercentage(): Int {
         val baseDailyPrice = DAY_PASS.price

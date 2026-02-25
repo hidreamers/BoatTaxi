@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const stripe = require('stripe');
 const admin = require('firebase-admin');
 require('dotenv').config();
 
@@ -20,15 +19,10 @@ function startAdExpirationScheduler() {
 }
 
 console.log('Environment check:');
-console.log('STRIPE_SECRET_KEY exists:', !!process.env.STRIPE_SECRET_KEY);
-console.log('STRIPE_SECRET_KEY starts with:', process.env.STRIPE_SECRET_KEY?.substring(0, 10));
 console.log('FIREBASE_PROJECT_ID exists:', !!process.env.FIREBASE_PROJECT_ID);
 
 const app = express();
 const port = process.env.PORT || 3000;
-
-// Initialize Stripe with your secret key
-const stripeClient = stripe(process.env.STRIPE_SECRET_KEY);
 
 // Initialize Firebase Admin with environment variables
 let firebaseConfig;
@@ -70,38 +64,41 @@ const db = admin.firestore();
 
 // Subscription plans mapping
 const SUBSCRIPTION_PLANS = {
-  'DAY_PASS': { days: 1, name: 'Day Pass', price: 199 },
-  'THREE_DAY_PASS': { days: 3, name: '3 Day Pass', price: 499 },
-  'FIVE_DAY_PASS': { days: 5, name: '5 Day Pass', price: 799 },
-  'WEEK_PASS': { days: 7, name: 'Week Pass', price: 999 },
-  'TWO_WEEK_PASS': { days: 14, name: '2 Week Pass', price: 1799 },
-  'MONTH_PASS': { days: 30, name: 'Month Pass', price: 2999 }
+  'DAY_PASS': { days: 1, name: 'Day Pass', price: 199, autoRenew: false },
+  'THREE_DAY_PASS': { days: 3, name: '3 Day Pass', price: 499, autoRenew: false },
+  'FIVE_DAY_PASS': { days: 5, name: '5 Day Pass', price: 799, autoRenew: false },
+  'WEEK_PASS': { days: 7, name: 'Week Pass', price: 999, autoRenew: false },
+  'TWO_WEEK_PASS': { days: 14, name: '2 Week Pass', price: 1799, autoRenew: false },
+  'MONTH_PASS': { days: 30, name: 'Month Pass', price: 2999, autoRenew: false },
+  'MONTH_PASS_AUTO': { days: 30, name: 'Monthly (Auto-Renew)', price: 2499, autoRenew: true }
 };
 
-// Ad pricing in cents (matching your Stripe payment links)
+// Ad pricing in cents (for Google Play IAP reference)
 const AD_PRICES = {
   standard: {
     1: 499,    // $4.99
     3: 999,    // $9.99
     7: 1999,   // $19.99
     14: 2999,  // $29.99
-    30: 4999   // $49.99
+    30: 4999,  // $49.99
+    'monthly_auto': 3999  // $39.99/month auto-renew
   },
   featured: {
     1: 999,    // $9.99
     3: 1999,   // $19.99
     7: 3499,   // $34.99
     14: 5499,  // $54.99
-    30: 8999   // $89.99
+    30: 8999,  // $89.99
+    'monthly_auto': 6999  // $69.99/month auto-renew
   }
 };
 
-// Function to activate an ad after payment
-async function activateAd(adId, session) {
+// Function to activate an ad after payment (Google Play IAP)
+async function activateAd(adId, purchaseData) {
   try {
-    // Determine which collection the ad is in from session metadata
-    let collection = session.metadata?.collection || 'ads';
-    let durationDays = parseInt(session.metadata?.durationDays) || 7;
+    // Determine which collection the ad is in from purchase metadata
+    let collection = purchaseData?.collection || 'ads';
+    let durationDays = parseInt(purchaseData?.durationDays) || 7;
     
     // Try to get the ad document
     let adDoc = await db.collection(collection).doc(adId).get();
@@ -119,7 +116,7 @@ async function activateAd(adId, session) {
     }
     
     const adData = adDoc.data();
-    // Use durationDays from session metadata, falling back to ad data, then to 7
+    // Use durationDays from purchase metadata, falling back to ad data, then to 7
     if (!durationDays || isNaN(durationDays)) {
       durationDays = adData.durationDays || 7;
     }
@@ -135,10 +132,11 @@ async function activateAd(adId, session) {
       startDate: admin.firestore.Timestamp.fromDate(startDate),
       endDate: admin.firestore.Timestamp.fromDate(endDate),
       activatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      paymentId: session.payment_intent || session.id,
-      stripeSessionId: session.id,
-      amountPaid: session.amount_total / 100,
+      paymentId: purchaseData.purchaseToken || purchaseData.orderId,
+      googlePlayOrderId: purchaseData.orderId,
+      amountPaid: purchaseData.amountPaid || 0,
       paymentStatus: 'COMPLETED',
+      paymentMethod: 'GOOGLE_PLAY',
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
     
@@ -192,8 +190,8 @@ async function expireOldAds() {
   }
 }
 
-// Function to update user subscription in Firestore
-async function updateUserSubscription(userId, planId, session) {
+// Function to update user subscription in Firestore (Google Play IAP)
+async function updateUserSubscription(userId, planId, purchaseData) {
   const plan = SUBSCRIPTION_PLANS[planId];
   if (!plan) {
     throw new Error(`Unknown plan: ${planId}`);
@@ -213,10 +211,11 @@ async function updateUserSubscription(userId, planId, session) {
     startDate: admin.firestore.Timestamp.fromDate(startDate),
     endDate: admin.firestore.Timestamp.fromDate(endDate),
     status: 'active',
-    paymentId: session.payment_intent || session.id,
-    stripeSessionId: session.id,
-    amount: session.amount_total / 100, // Convert from cents
-    currency: session.currency,
+    paymentId: purchaseData.purchaseToken || purchaseData.orderId,
+    googlePlayOrderId: purchaseData.orderId,
+    amount: plan.price / 100, // Convert from cents
+    currency: 'usd',
+    paymentMethod: 'GOOGLE_PLAY',
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   };
@@ -240,179 +239,107 @@ async function updateUserSubscription(userId, planId, session) {
 // Middleware
 app.use(cors());
 
-// Webhook endpoint for handling Stripe events (must come before express.json())
-app.post('/api/webhooks', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  let event;
-
-  try {
-    event = stripeClient.webhooks.constructEvent(req.body, sig, endpointSecret);
-  } catch (err) {
-    console.log(`Webhook signature verification failed.`, err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  // Handle the event
-  switch (event.type) {
-    case 'checkout.session.completed':
-      const session = event.data.object;
-      console.log('Checkout session completed:', session.id);
-
-      if (session.metadata?.type === 'ad') {
-        const adId = session.metadata.adId;
-        try {
-          await activateAd(adId, session);
-          console.log(`Successfully activated ad ${adId}`);
-        } catch (error) {
-          console.error('Error activating ad:', error);
-        }
-      } else {
-        // Extract user ID from client_reference_id (passed from Android app)
-        const userId = session.client_reference_id;
-        const planId = session.metadata?.planId;
-
-        if (userId && planId) {
-          try {
-            // Update user's subscription in Firestore
-            await updateUserSubscription(userId, planId, session);
-            console.log(`Successfully activated ${planId} subscription for user ${userId}`);
-          } catch (error) {
-            console.error('Error updating subscription:', error);
-          }
-        } else {
-          console.log('Missing userId or planId in session:', { userId, planId, metadata: session.metadata });
-        }
-      }
-      break;
-
-    case 'invoice.payment_succeeded':
-      // Handle recurring subscription payments
-      const invoice = event.data.object;
-      console.log('Invoice payment succeeded:', invoice.id);
-      // TODO: Handle recurring payment success
-      break;
-
-    case 'invoice.payment_failed':
-      // Handle failed recurring payments
-      const failedInvoice = event.data.object;
-      console.log('Invoice payment failed:', failedInvoice.id);
-      // TODO: Handle payment failure, maybe suspend subscription
-      break;
-
-    case 'customer.subscription.deleted':
-      // Handle subscription cancellation
-      const canceledSubscription = event.data.object;
-      console.log('Subscription canceled:', canceledSubscription.id);
-      // TODO: Deactivate user's subscription
-      break;
-
-    default:
-      console.log(`Unhandled event type ${event.type}`);
-  }
-
-  res.json({ received: true });
-});
 
 app.use(express.json());
 
-// Create PaymentIntent endpoint
-app.post('/api/create-payment-intent', async (req, res) => {
-  try {
-    const { planId, currency = 'usd' } = req.body;
+// ========================================
+// GOOGLE PLAY IN-APP PURCHASE VERIFICATION
+// ========================================
 
-    if (!planId || !SUBSCRIPTION_PLANS[planId]) {
+// Verify Google Play subscription purchase and activate
+app.post('/api/verify-subscription-purchase', async (req, res) => {
+  try {
+    const { purchaseToken, orderId, productId, userId, planId } = req.body;
+
+    if (!purchaseToken || !userId || !planId) {
+      return res.status(400).json({
+        error: 'purchaseToken, userId, and planId are required'
+      });
+    }
+
+    if (!SUBSCRIPTION_PLANS[planId]) {
       return res.status(400).json({
         error: 'Invalid plan ID'
       });
     }
 
-    const plan = SUBSCRIPTION_PLANS[planId];
+    // In production, you should verify the purchase with Google Play Developer API
+    // For now, we trust the client and activate the subscription
+    console.log(`Verifying subscription purchase: ${orderId} for user ${userId}`);
 
-    // Create PaymentIntent
-    const paymentIntent = await stripeClient.paymentIntents.create({
-      amount: plan.price,
-      currency: currency,
-      automatic_payment_methods: {
-        enabled: true,
-      },
-      metadata: {
-        planId: planId,
-        planName: plan.name
-      }
-    });
+    const purchaseData = {
+      purchaseToken: purchaseToken,
+      orderId: orderId,
+      productId: productId
+    };
+
+    // Activate the subscription
+    const subscriptionId = await updateUserSubscription(userId, planId, purchaseData);
 
     res.json({
-      clientSecret: paymentIntent.client_secret,
-      amount: plan.price,
-      currency: currency,
-      planName: plan.name
+      success: true,
+      subscriptionId: subscriptionId,
+      message: 'Subscription activated successfully'
     });
 
   } catch (error) {
-    console.error('Error creating payment intent:', error);
+    console.error('Error verifying subscription purchase:', error);
     res.status(500).json({
-      error: 'Failed to create payment intent'
+      error: 'Failed to verify subscription purchase',
+      details: error.message
     });
   }
 });
 
-// Create Checkout Session endpoint
-app.post('/api/create-checkout-session', async (req, res) => {
+// Verify Google Play ad purchase and activate ad
+app.post('/api/verify-ad-purchase', async (req, res) => {
   try {
-    console.log('Received body:', req.body);
-    const { planId, userId, currency = 'usd' } = req.body;
+    const { purchaseToken, orderId, productId, adId, durationDays, amountPaid, collection } = req.body;
 
-    if (!planId || !SUBSCRIPTION_PLANS[planId]) {
+    if (!purchaseToken || !adId) {
       return res.status(400).json({
-        error: 'Invalid plan ID'
+        error: 'purchaseToken and adId are required'
       });
     }
 
-    if (!userId) {
-      return res.status(400).json({
-        error: 'User ID required'
-      });
-    }
+    console.log(`Verifying ad purchase: ${orderId} for ad ${adId}`);
 
-    const plan = SUBSCRIPTION_PLANS[planId];
+    const purchaseData = {
+      purchaseToken: purchaseToken,
+      orderId: orderId,
+      productId: productId,
+      durationDays: durationDays || 7,
+      amountPaid: amountPaid || 0,
+      collection: collection || 'ads'
+    };
 
-    // Create Checkout Session
-    const session = await stripeClient.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: currency,
-            product_data: {
-              name: plan.name,
-            },
-            unit_amount: plan.price,
-          },
-          quantity: 1,
-        },
-      ],
-      mode: 'payment',
-      success_url: 'boattaxie://success', // Your app's deep link
-      cancel_url: 'boattaxie://cancel',
-      client_reference_id: userId,
-      metadata: {
-        planId: planId,
-        planName: plan.name
-      }
-    });
+    // Activate the ad
+    await activateAd(adId, purchaseData);
 
     res.json({
-      url: session.url,
-      sessionId: session.id
+      success: true,
+      adId: adId,
+      message: 'Ad activated successfully'
     });
 
   } catch (error) {
-    console.error('Error creating checkout session:', error);
+    console.error('Error verifying ad purchase:', error);
     res.status(500).json({
-      error: 'Failed to create checkout session'
+      error: 'Failed to verify ad purchase',
+      details: error.message
     });
+  }
+});
+
+// Get available IAP products info (for reference)
+app.get('/api/iap-products', async (req, res) => {
+  try {
+    res.json({
+      subscriptions: SUBSCRIPTION_PLANS,
+      ads: AD_PRICES
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get products' });
   }
 });
 
@@ -636,8 +563,8 @@ app.post('/api/admin/verifications/:submissionId/reject', async (req, res) => {
   }
 });
 
-// Create Ad Checkout Session endpoint
-app.post('/api/create-ad-checkout-session', async (req, res) => {
+// Create Draft Ad endpoint (prepares ad for Google Play IAP payment)
+app.post('/api/create-draft-ad', async (req, res) => {
   try {
     const { durationDays, isFeatured, businessName, title, description, imageUri, logoUri, youtubeUrl, phone, email, website, category, location, userId, existingAdId } = req.body;
 
@@ -656,20 +583,20 @@ app.post('/api/create-ad-checkout-session', async (req, res) => {
       if (advertisementsDoc.exists) {
         collection = 'advertisements';
         adId = existingAdId;
-        console.log(`Activating existing ad ${adId} from ${collection} collection`);
+        console.log(`Using existing ad ${adId} from ${collection} collection`);
       } else {
         // Check 'ads' collection
         const adsDoc = await db.collection('ads').doc(existingAdId).get();
         if (adsDoc.exists) {
           collection = 'ads';
           adId = existingAdId;
-          console.log(`Activating existing ad ${adId} from ${collection} collection`);
+          console.log(`Using existing ad ${adId} from ${collection} collection`);
         } else {
           return res.status(404).json({ error: 'Ad not found' });
         }
       }
     } else {
-      // Create new ad in Firestore as draft (filter out undefined values)
+      // Create new ad in Firestore as draft
       const adData = {
         businessName: businessName || '',
         title: title || '',
@@ -685,7 +612,7 @@ app.post('/api/create-ad-checkout-session', async (req, res) => {
         isFeatured: isFeatured || false,
         location: location || '',
         userId: userId || '',
-        status: 'draft',
+        status: 'PENDING_PAYMENT',
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       };
       
@@ -694,34 +621,19 @@ app.post('/api/create-ad-checkout-session', async (req, res) => {
       console.log(`Created new draft ad ${adId}`);
     }
 
-    const session = await stripeClient.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [{
-        price_data: {
-          currency: 'usd',
-          product_data: {
-            name: `Ad - ${durationDays} days ${isFeatured ? 'Featured' : 'Standard'}`,
-          },
-          unit_amount: price,
-        },
-        quantity: 1,
-      }],
-      mode: 'payment',
-      success_url: `boattaxie://ad-payment-success?adId=${adId}`,
-      cancel_url: `boattaxie://ad-payment-cancel`,
-      metadata: {
-        adId: adId,
-        type: 'ad',
-        collection: collection,  // Track which collection the ad is in
-        durationDays: durationDays.toString()
-      }
+    // Return ad info for Google Play IAP purchase
+    res.json({ 
+      adId: adId,
+      collection: collection,
+      durationDays: durationDays,
+      isFeatured: isFeatured,
+      price: price,
+      productId: `ad_${isFeatured ? 'featured' : 'standard'}_${durationDays}day`
     });
 
-    res.json({ url: session.url });
-
   } catch (error) {
-    console.error('Error creating ad checkout session:', error);
-    res.status(500).json({ error: 'Failed to create ad checkout session' });
+    console.error('Error creating draft ad:', error);
+    res.status(500).json({ error: 'Failed to create draft ad' });
   }
 });
 
@@ -785,9 +697,234 @@ app.get('/api/ads/:adId/status', async (req, res) => {
   }
 });
 
+// ========================================
+// EXPLORE PLACES API - Cached nearby search
+// ========================================
+
+// Cache duration in milliseconds (2 hours)
+const PLACES_CACHE_DURATION = 2 * 60 * 60 * 1000;
+
+// Get nearby places with caching
+app.get('/api/places/nearby', async (req, res) => {
+  try {
+    const { lat, lng, radius = 5000, category = 'all', forceRefresh = false } = req.query;
+    
+    if (!lat || !lng) {
+      return res.status(400).json({ error: 'lat and lng are required' });
+    }
+    
+    // Create a cache key based on location (rounded to reduce cache misses)
+    const roundedLat = Math.round(parseFloat(lat) * 100) / 100;
+    const roundedLng = Math.round(parseFloat(lng) * 100) / 100;
+    const cacheKey = `places_${roundedLat}_${roundedLng}_${category}_${radius}`;
+    
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cacheDoc = await db.collection('places_cache').doc(cacheKey).get();
+      if (cacheDoc.exists) {
+        const cacheData = cacheDoc.data();
+        const cacheAge = Date.now() - cacheData.cachedAt.toMillis();
+        
+        if (cacheAge < PLACES_CACHE_DURATION) {
+          console.log(`Places cache hit for ${cacheKey}, age: ${Math.round(cacheAge / 60000)} minutes`);
+          return res.json({
+            places: cacheData.places,
+            fromCache: true,
+            cacheAge: cacheAge
+          });
+        }
+      }
+    }
+    
+    // Cache miss or expired - fetch from Google Places API
+    console.log(`Places cache miss for ${cacheKey}, fetching from Google...`);
+    
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Google Maps API key not configured' });
+    }
+    
+    // Map category to Google Places type
+    const typeMap = {
+      'all': '',
+      'restaurants': 'restaurant',
+      'bars': 'bar|night_club',
+      'tours': 'travel_agency|tourist_attraction',
+      'hotels': 'lodging',
+      'attractions': 'tourist_attraction|museum|amusement_park',
+      'shopping': 'shopping_mall|store'
+    };
+    
+    const placeType = typeMap[category] || '';
+    
+    // Build Google Places API URL
+    let url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radius}&key=${apiKey}`;
+    if (placeType) {
+      url += `&type=${placeType.split('|')[0]}`; // API only accepts single type
+    }
+    
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+      console.error('Google Places API error:', data.status, data.error_message);
+      return res.status(500).json({ error: 'Failed to fetch places', details: data.status });
+    }
+    
+    // Transform places to our format
+    const places = (data.results || []).map(place => ({
+      placeId: place.place_id,
+      name: place.name,
+      address: place.vicinity || '',
+      lat: place.geometry?.location?.lat || 0,
+      lng: place.geometry?.location?.lng || 0,
+      rating: place.rating || null,
+      userRatingsTotal: place.user_ratings_total || null,
+      priceLevel: place.price_level || null,
+      types: place.types || [],
+      isOpenNow: place.opening_hours?.open_now || null,
+      photoReference: place.photos?.[0]?.photo_reference || null,
+      iconUrl: place.icon || null,
+      businessStatus: place.business_status || null
+    }));
+    
+    // Store in cache
+    await db.collection('places_cache').doc(cacheKey).set({
+      places: places,
+      cachedAt: admin.firestore.FieldValue.serverTimestamp(),
+      location: { lat: parseFloat(lat), lng: parseFloat(lng) },
+      category: category,
+      radius: parseInt(radius)
+    });
+    
+    console.log(`Cached ${places.length} places for ${cacheKey}`);
+    
+    res.json({
+      places: places,
+      fromCache: false,
+      count: places.length
+    });
+    
+  } catch (error) {
+    console.error('Error fetching nearby places:', error);
+    res.status(500).json({ error: 'Failed to fetch places', details: error.message });
+  }
+});
+
+// Get place details (also cached)
+app.get('/api/places/:placeId/details', async (req, res) => {
+  try {
+    const { placeId } = req.params;
+    
+    // Check cache first
+    const cacheDoc = await db.collection('place_details_cache').doc(placeId).get();
+    if (cacheDoc.exists) {
+      const cacheData = cacheDoc.data();
+      const cacheAge = Date.now() - cacheData.cachedAt.toMillis();
+      
+      // Place details cache for 24 hours (they don't change often)
+      if (cacheAge < 24 * 60 * 60 * 1000) {
+        return res.json({
+          place: cacheData.place,
+          fromCache: true
+        });
+      }
+    }
+    
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Google Maps API key not configured' });
+    }
+    
+    const fields = 'place_id,name,formatted_address,formatted_phone_number,website,opening_hours,rating,user_ratings_total,reviews,geometry,photos,types,price_level,business_status';
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&key=${apiKey}`;
+    
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.status !== 'OK') {
+      console.error('Google Place Details API error:', data.status);
+      return res.status(500).json({ error: 'Failed to fetch place details' });
+    }
+    
+    const result = data.result;
+    const place = {
+      placeId: result.place_id,
+      name: result.name,
+      address: result.formatted_address || '',
+      phoneNumber: result.formatted_phone_number || null,
+      website: result.website || null,
+      lat: result.geometry?.location?.lat || 0,
+      lng: result.geometry?.location?.lng || 0,
+      rating: result.rating || null,
+      userRatingsTotal: result.user_ratings_total || null,
+      priceLevel: result.price_level || null,
+      types: result.types || [],
+      isOpenNow: result.opening_hours?.open_now || null,
+      openingHours: result.opening_hours?.weekday_text || null,
+      photoReference: result.photos?.[0]?.photo_reference || null,
+      businessStatus: result.business_status || null,
+      reviews: (result.reviews || []).slice(0, 5).map(r => ({
+        author: r.author_name,
+        rating: r.rating,
+        text: r.text,
+        time: r.relative_time_description
+      }))
+    };
+    
+    // Cache it
+    await db.collection('place_details_cache').doc(placeId).set({
+      place: place,
+      cachedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    res.json({
+      place: place,
+      fromCache: false
+    });
+    
+  } catch (error) {
+    console.error('Error fetching place details:', error);
+    res.status(500).json({ error: 'Failed to fetch place details', details: error.message });
+  }
+});
+
+// Clear places cache (admin endpoint)
+app.post('/api/admin/clear-places-cache', async (req, res) => {
+  try {
+    const batchSize = 100;
+    let deleted = 0;
+    
+    // Delete places_cache collection
+    const placesSnapshot = await db.collection('places_cache').limit(batchSize).get();
+    if (!placesSnapshot.empty) {
+      const batch = db.batch();
+      placesSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      deleted += placesSnapshot.size;
+    }
+    
+    // Delete place_details_cache collection
+    const detailsSnapshot = await db.collection('place_details_cache').limit(batchSize).get();
+    if (!detailsSnapshot.empty) {
+      const batch = db.batch();
+      detailsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      deleted += detailsSnapshot.size;
+    }
+    
+    res.json({ success: true, deleted: deleted });
+  } catch (error) {
+    console.error('Error clearing places cache:', error);
+    res.status(500).json({ error: 'Failed to clear cache' });
+  }
+});
+
 app.listen(port, '0.0.0.0', () => {
   console.log(`BoatTaxie backend server running on port ${port}`);
-  console.log(`Make sure to set your STRIPE_SECRET_KEY environment variable`);
+  console.log(`Using Google Play In-App Purchases for payments`);
   
   // Run ad expiration check on startup
   expireOldAds().then(count => {

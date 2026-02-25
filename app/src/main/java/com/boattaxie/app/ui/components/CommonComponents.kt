@@ -2,6 +2,8 @@ package com.boattaxie.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -14,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -21,6 +24,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
 import com.boattaxie.app.data.model.*
 import com.boattaxie.app.ui.theme.*
 import java.io.File
@@ -179,8 +184,9 @@ fun SubscriptionPlanCard(
 ) {
     val savings = plan.getSavingsPercentage()
     val savingsAmount = plan.getSavingsAmount()
-    val isBestValue = plan == SubscriptionPlan.MONTH_PASS
+    val isBestValue = plan == SubscriptionPlan.MONTH_PASS || plan == SubscriptionPlan.MONTH_PASS_AUTO
     val isPopular = plan == SubscriptionPlan.WEEK_PASS
+    val isAutoRenew = plan.isAutoRenew
     
     Card(
         onClick = onClick,
@@ -200,17 +206,25 @@ fun SubscriptionPlanCard(
         )
     ) {
         Column {
-            // Badge for best value or popular
-            if (isBestValue || isPopular) {
+            // Badge for best value, popular, or auto-renew
+            if (isBestValue || isPopular || isAutoRenew) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(if (isBestValue) Success else Warning)
+                        .background(when {
+                            isAutoRenew -> Primary
+                            isBestValue -> Success
+                            else -> Warning
+                        })
                         .padding(vertical = 4.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (isBestValue) "🏆 BEST VALUE - Save 58%" else "⭐ POPULAR",
+                        text = when {
+                            isAutoRenew -> "🔄 AUTO-RENEW SUBSCRIPTION"
+                            isBestValue -> "🏆 BEST VALUE - Save 58%"
+                            else -> "⭐ POPULAR"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -277,6 +291,7 @@ fun SubscriptionPlanCard(
 
 /**
  * Advertisement card for displaying local business ads
+ * Now with YouTube video playback support
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -285,6 +300,8 @@ fun AdvertisementCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    
     // Check if local image exists
     val hasLocalImage = remember(ad.imageUrl) {
         if (ad.imageUrl.isNullOrBlank()) {
@@ -329,40 +346,183 @@ fun AdvertisementCard(
                 val imageModel = remember(ad.imageUrl) {
                     if (ad.imageUrl.startsWith("/")) File(ad.imageUrl) else ad.imageUrl
                 }
-                AsyncImage(
-                    model = imageModel,
-                    contentDescription = ad.title,
+                // Bordered image container - no cut-off
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
-                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
-                    contentScale = ContentScale.Crop
-                )
+                        .padding(12.dp)
+                        .border(
+                            width = 2.dp,
+                            color = Primary.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFF5F5F5)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    SubcomposeAsyncImage(
+                        model = imageModel,
+                        contentDescription = ad.title,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 150.dp, max = 220.dp)
+                            .padding(4.dp),
+                        contentScale = ContentScale.Fit,
+                        alignment = Alignment.Center,
+                        loading = {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(32.dp),
+                                    color = Primary
+                                )
+                            }
+                        },
+                        error = {
+                            // Show category placeholder on error
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                            colors = listOf(
+                                                Primary.copy(alpha = 0.6f),
+                                                Primary.copy(alpha = 0.8f)
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = ad.category.getIcon(),
+                                        fontSize = 48.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = ad.category.getDisplayName(),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        },
+                        success = { SubcomposeAsyncImageContent() }
+                    )
+                }
             } else if (youtubeVideoId != null) {
-                // Show YouTube thumbnail with play button
+                // Show YouTube thumbnail with play button - clickable to open video
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(200.dp)
+                        .clickable {
+                            // Open YouTube video
+                            val youtubeUrl = ad.youtubeUrl ?: "https://www.youtube.com/watch?v=$youtubeVideoId"
+                            try {
+                                val intent = android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(youtubeUrl)
+                                )
+                                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                android.util.Log.e("AdCard", "Failed to open YouTube: ${e.message}")
+                            }
+                        }
                 ) {
-                    AsyncImage(
+                    SubcomposeAsyncImage(
                         model = "https://img.youtube.com/vi/$youtubeVideoId/hqdefault.jpg",
                         contentDescription = "YouTube Video",
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
-                        contentScale = ContentScale.Crop
+                        contentScale = ContentScale.Crop,
+                        loading = {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color(0xFFFF0000).copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(32.dp),
+                                    color = Color(0xFFFF0000)
+                                )
+                            }
+                        },
+                        error = {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color(0xFFFF0000).copy(alpha = 0.8f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayCircle,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "YouTube Video",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        },
+                        success = { SubcomposeAsyncImageContent() }
                     )
-                    // Play button overlay
+                    // Play button overlay - more prominent
                     Surface(
                         modifier = Modifier
                             .align(Alignment.Center)
-                            .size(64.dp),
-                        shape = RoundedCornerShape(32.dp),
-                        color = Color(0xFFFF0000).copy(alpha = 0.9f)
+                            .size(72.dp),
+                        shape = RoundedCornerShape(36.dp),
+                        color = Color(0xFFFF0000),
+                        shadowElevation = 8.dp
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text("▶", color = Color.White, style = MaterialTheme.typography.headlineMedium)
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Play Video",
+                                tint = Color.White,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+                    }
+                    // YouTube branding
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFFFF0000)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayCircle,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "YouTube",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -462,20 +622,22 @@ fun AdvertisementCard(
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                // Title
+                // Title - with proper width to prevent cutoff
                 Text(
                     text = ad.title,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 
                 Spacer(modifier = Modifier.height(6.dp))
                 
                 // Business name with logo
                 Row(
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     // Logo - check if file exists
                     val logoImage = ad.logoUrl ?: ad.imageUrl
@@ -491,11 +653,36 @@ fun AdvertisementCard(
                         color = Surface
                     ) {
                         if (logoExists && !logoImage.isNullOrBlank()) {
-                            AsyncImage(
+                            SubcomposeAsyncImage(
                                 model = if (logoImage.startsWith("/")) File(logoImage) else logoImage,
                                 contentDescription = "Logo",
                                 modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
+                                contentScale = ContentScale.Crop,
+                                loading = {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = Primary
+                                        )
+                                    }
+                                },
+                                error = {
+                                    // Category emoji fallback on error
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        Text(
+                                            text = ad.category.getIcon(),
+                                            fontSize = 18.sp
+                                        )
+                                    }
+                                },
+                                success = { SubcomposeAsyncImageContent() }
                             )
                         } else {
                             // Category emoji fallback
@@ -515,7 +702,10 @@ fun AdvertisementCard(
                         text = ad.businessName,
                         style = MaterialTheme.typography.bodyMedium,
                         color = Primary,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
                 }
                 
@@ -524,12 +714,22 @@ fun AdvertisementCard(
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = ad.description,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 20.sp
                     )
                 }
+                
+                // Tap for more hint
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Tap for more details →",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Primary,
+                    fontWeight = FontWeight.Medium
+                )
                 
                 // Location if available
                 if (ad.locationName != null) {
@@ -777,14 +977,54 @@ fun LocalAdCard(
         Column {
             // Ad image
             if (imageUrl != null) {
-                AsyncImage(
+                SubcomposeAsyncImage(
                     model = imageUrl,
                     contentDescription = businessName,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(120.dp)
                         .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    loading = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Primary.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Primary
+                            )
+                        }
+                    },
+                    error = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Primary.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.Store,
+                                    contentDescription = null,
+                                    tint = Primary,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = businessName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Primary,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    },
+                    success = { SubcomposeAsyncImageContent() }
                 )
             }
             

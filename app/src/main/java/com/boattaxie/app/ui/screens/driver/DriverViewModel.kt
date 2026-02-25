@@ -57,7 +57,11 @@ data class DriverUiState(
     val taxiRequestCount: Int = 0,
     val selectedRequest: Booking? = null,
     
-    // Fare adjustment
+    // Driver price offers - track which bookings driver has submitted offers for
+    val submittedOfferBookingIds: Set<String> = emptySet(),
+    val myOffers: Map<String, DriverOffer> = emptyMap(),  // bookingId -> my offer
+    
+    // Fare adjustment (legacy - keeping for backwards compatibility)
     val showFareAdjustmentSheet: Boolean = false,
     val isNightRateTime: Boolean = false,
     val adjustedFare: String = "",
@@ -156,9 +160,11 @@ class DriverViewModel @Inject constructor(
     
     private fun loadDriverData() {
         viewModelScope.launch {
+            android.util.Log.d("DriverVM", "loadDriverData: Starting to observe user")
             authRepository.observeCurrentUser().collect { user ->
+                android.util.Log.d("DriverVM", "loadDriverData: Received user update, user=${user?.fullName}")
                 user?.let {
-                    android.util.Log.d("DriverVM", "loadDriverData: hasBoat=${it.hasBoat}, hasTaxi=${it.hasTaxi}, vehicleType=${it.vehicleType}")
+                    android.util.Log.d("DriverVM", "loadDriverData: hasBoat=${it.hasBoat}, hasTaxi=${it.hasTaxi}, vehicleType=${it.vehicleType}, userType=${it.userType}")
                     _uiState.update { state ->
                         state.copy(
                             driverName = it.fullName.split(" ").firstOrNull() ?: "Driver",
@@ -357,6 +363,21 @@ class DriverViewModel @Inject constructor(
                 }
             }
         }
+        // Continuously check for active rides (in case rider accepts our fare proposal)
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(3000) // Check every 3 seconds
+                if (_uiState.value.isOnline && _uiState.value.activeRide == null) {
+                    val booking = bookingRepository.getDriverActiveBooking()
+                    if (booking != null) {
+                        android.util.Log.d("DriverVM", "Found active ride via polling: ${booking.id}, status: ${booking.status}")
+                        _uiState.update { state ->
+                            state.copy(activeRide = booking)
+                        }
+                    }
+                }
+            }
+        }
     }
     
     /**
@@ -416,6 +437,62 @@ class DriverViewModel @Inject constructor(
     
     fun declineBooking(bookingId: String) {
         _uiState.update { it.copy(pendingRequest = null) }
+    }
+    
+    /**
+     * Propose a fare change to the rider. This will notify the rider who can accept or decline.
+     */
+    fun proposeFareChange(bookingId: String, newFare: Double, reason: String) {
+        viewModelScope.launch {
+            bookingRepository.proposeFareChange(bookingId, newFare, reason)
+        }
+    }
+    
+    /**
+     * Submit a price offer for a ride request (new driver-set pricing flow)
+     * Multiple drivers can submit offers, rider picks one
+     */
+    fun submitPriceOffer(bookingId: String, price: Double, message: String? = null) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            
+            val result = bookingRepository.submitDriverOffer(bookingId, price, message)
+            result.fold(
+                onSuccess = { offer ->
+                    android.util.Log.d("DriverVM", "Successfully submitted offer: $${offer.price}")
+                    _uiState.update { 
+                        it.copy(
+                            isLoading = false,
+                            // Don't clear selected request - driver can see their offer was submitted
+                            errorMessage = null
+                        ) 
+                    }
+                },
+                onFailure = { error ->
+                    android.util.Log.e("DriverVM", "Failed to submit offer: ${error.message}")
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = "Failed to submit offer: ${error.message}"
+                        )
+                    }
+                }
+            )
+        }
+    }
+    
+    /**
+     * Check if driver already submitted an offer for this booking
+     */
+    suspend fun hasSubmittedOffer(bookingId: String): Boolean {
+        return bookingRepository.getDriverOfferForBooking(bookingId) != null
+    }
+    
+    /**
+     * Get the driver's existing offer for a booking
+     */
+    suspend fun getMyOffer(bookingId: String): DriverOffer? {
+        return bookingRepository.getDriverOfferForBooking(bookingId)
     }
     
     fun clearAcceptedBooking() {

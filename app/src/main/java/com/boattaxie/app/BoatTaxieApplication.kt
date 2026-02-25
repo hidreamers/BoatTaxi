@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import com.boattaxie.app.util.UpdateChecker
 import com.google.android.gms.ads.MobileAds
 import com.google.android.libraries.places.api.Places
 import dagger.hilt.android.HiltAndroidApp
@@ -32,6 +33,13 @@ class BoatTaxieApplication : Application() {
         
         // Create notification channels
         createNotificationChannels()
+        
+        // Schedule daily update checks
+        try {
+            UpdateChecker.scheduleDailyUpdateCheck(this)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
     
     private fun createNotificationChannels() {

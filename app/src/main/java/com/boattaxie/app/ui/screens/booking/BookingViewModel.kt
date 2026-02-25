@@ -1,6 +1,7 @@
 package com.boattaxie.app.ui.screens.booking
 
 import android.location.Geocoder
+import android.os.Looper
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.boattaxie.app.data.model.*
@@ -9,6 +10,10 @@ import com.boattaxie.app.data.repository.AuthRepository
 import com.boattaxie.app.data.repository.BookingRepository
 import com.boattaxie.app.data.repository.SubscriptionRepository
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.model.LatLng
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -27,6 +32,9 @@ data class BookingUiState(
     val canBeDriver: Boolean = false,
     val hasActiveSubscription: Boolean = false, // Subscription status for booking
     val showSubscriptionRequired: Boolean = false, // Show paywall dialog
+    
+    // Passenger count
+    val passengerCount: Int = 1,
     
     // Location states
     val currentLocation: LatLng? = null,
@@ -47,9 +55,14 @@ data class BookingUiState(
     val estimatedDistance: Double? = null,
     val estimatedDuration: Int? = null,
     
-    // Driver fare adjustment (when captain proposes different rate)
+    // Driver offers - multiple drivers can submit price offers
+    val driverOffers: List<DriverOffer> = emptyList(),
+    val isWaitingForOffers: Boolean = false,  // True while waiting for driver price offers
+    
+    // Driver fare adjustment (legacy - keeping for backwards compatibility)
     val driverAdjustedFare: Double? = null,
     val fareAdjustmentReason: String? = null,
+    val fareAdjustmentDriverName: String? = null,
     val showFareAdjustmentDialog: Boolean = false,
     val isNightRate: Boolean = false,
     
@@ -71,12 +84,16 @@ data class BookingUiState(
     val onlineDrivers: List<User> = emptyList(),
     val boatDriversOnline: Int = 0,
     val taxiDriversOnline: Int = 0,
+    val totalOnlineUsers: Int = 0,
     val showOnlineDrivers: Boolean = false,
     val selectedDriver: User? = null,
     
     // Specific driver request
     val requestedDriverId: String? = null,
     val requestedDriverName: String? = null,
+    
+    // Unrated completed booking (for showing rating popup)
+    val unratedBookingId: String? = null,
     
     val errorMessage: String? = null
 )
@@ -94,20 +111,74 @@ class BookingViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(BookingUiState())
     val uiState: StateFlow<BookingUiState> = _uiState.asStateFlow()
     
+    // Location callback for real-time updates
+    private val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(result: LocationResult) {
+            result.lastLocation?.let { location ->
+                val latLng = LatLng(location.latitude, location.longitude)
+                _uiState.update { it.copy(currentLocation = latLng) }
+            }
+        }
+    }
+    
     init {
         loadAdsForMap()
         loadUserResidencyStatus()
         observeOnlineDrivers()
-        getCurrentLocation()
+        observeAllOnlineUsers()
+        startLocationUpdates()
         loadActiveBooking()
         checkSubscriptionStatus()
     }
     
+    override fun onCleared() {
+        super.onCleared()
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+    }
+    
     /**
-     * Check if user has an active subscription
+     * Start continuous location updates for real-time tracking
+     */
+    private fun startLocationUpdates() {
+        try {
+            val locationRequest = LocationRequest.Builder(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                2000L // Update every 2 seconds for real-time movement
+            ).setMinUpdateIntervalMillis(1000L)
+            .setMinUpdateDistanceMeters(3f) // Update if moved at least 3 meters
+            .build()
+            
+            fusedLocationClient.requestLocationUpdates(
+                locationRequest,
+                locationCallback,
+                Looper.getMainLooper()
+            )
+            
+            // Also get last known location immediately
+            getCurrentLocation()
+        } catch (e: SecurityException) {
+            _uiState.update { it.copy(errorMessage = "Location permission required") }
+        }
+    }
+    
+    /**
+     * Check if user has an active subscription, is a verified driver, or has free bookings
      */
     private fun checkSubscriptionStatus() {
         viewModelScope.launch {
+            // First, check if user is a verified driver or has VIP promo code
+            val currentUser = authRepository.getCurrentUser()
+            val isVerifiedDriver = currentUser?.canBeDriver == true && currentUser.isVerified
+            val hasFreeBookings = currentUser?.hasFreeBookingsForLife == true
+            
+            if (isVerifiedDriver || hasFreeBookings) {
+                // Verified drivers and VIP users get free rides - no subscription needed
+                android.util.Log.d("BookingVM", "User has free access: isVerifiedDriver=$isVerifiedDriver, hasFreeBookings=$hasFreeBookings")
+                _uiState.update { it.copy(hasActiveSubscription = true) }
+                return@launch
+            }
+            
+            // Otherwise check for actual subscription
             subscriptionRepository.observeSubscription().collect { subscription ->
                 val isActive = subscription != null && subscription.status == SubscriptionStatus.ACTIVE
                 _uiState.update { it.copy(hasActiveSubscription = isActive) }
@@ -182,6 +253,18 @@ class BookingViewModel @Inject constructor(
                         taxiDriversOnline = taxiCount
                     ) 
                 }
+            }
+        }
+    }
+    
+    /**
+     * Observe ALL online users (passengers + drivers) in real-time
+     */
+    private fun observeAllOnlineUsers() {
+        viewModelScope.launch {
+            authRepository.observeAllOnlineUsers().collect { count ->
+                android.util.Log.d("BookingVM", "Total online users: $count")
+                _uiState.update { it.copy(totalOnlineUsers = count) }
             }
         }
     }
@@ -400,7 +483,8 @@ class BookingViewModel @Inject constructor(
             it.copy(
                 pickupLocation = location,
                 pickupAddress = address,
-                isSearchingPickup = false
+                isSearchingPickup = false,
+                isSettingPickupOnMap = false // Auto-switch to dropoff mode
             )
         }
         calculateFare()
@@ -548,6 +632,18 @@ class BookingViewModel @Inject constructor(
         return earthRadius * c
     }
     
+    fun setPassengerCount(count: Int) {
+        _uiState.update { it.copy(passengerCount = count.coerceIn(1, 10)) }
+    }
+    
+    fun incrementPassengers() {
+        _uiState.update { it.copy(passengerCount = (it.passengerCount + 1).coerceAtMost(10)) }
+    }
+    
+    fun decrementPassengers() {
+        _uiState.update { it.copy(passengerCount = (it.passengerCount - 1).coerceAtLeast(1)) }
+    }
+    
     fun confirmBooking() {
         val pickup = _uiState.value.pickupLocation ?: return
         val dropoff = _uiState.value.dropoffLocation ?: return
@@ -555,13 +651,27 @@ class BookingViewModel @Inject constructor(
         val distance = _uiState.value.estimatedDistance ?: return
         val duration = _uiState.value.estimatedDuration ?: return
         
+        // Check if there are drivers online for this vehicle type
+        val driversOnline = when (_uiState.value.vehicleType) {
+            VehicleType.BOAT -> _uiState.value.boatDriversOnline
+            VehicleType.TAXI -> _uiState.value.taxiDriversOnline
+        }
+        
+        if (driversOnline == 0) {
+            val vehicleName = if (_uiState.value.vehicleType == VehicleType.BOAT) "boats" else "taxis"
+            _uiState.update { 
+                it.copy(errorMessage = "No $vehicleName are online right now. Please try again later!") 
+            }
+            return
+        }
+        
         viewModelScope.launch {
             _uiState.update { it.copy(isBooking = true, errorMessage = null) }
             
             // Get current user info for rider details
             val currentUser = authRepository.getCurrentUser()
             
-            android.util.Log.d("BookingVM", "confirmBooking: creating booking for requestedDriver=${_uiState.value.requestedDriverId}, rider=${currentUser?.fullName}")
+            android.util.Log.d("BookingVM", "confirmBooking: fare=$fare, distance=$distance, duration=$duration, passengers=${_uiState.value.passengerCount}, requestedDriver=${_uiState.value.requestedDriverId}")
             
             val result = bookingRepository.createBooking(
                 vehicleType = _uiState.value.vehicleType,
@@ -571,6 +681,8 @@ class BookingViewModel @Inject constructor(
                 destinationAddress = _uiState.value.dropoffAddress ?: "Unknown destination",
                 estimatedDistance = distance.toFloat(),
                 estimatedDuration = duration,
+                estimatedFare = fare,
+                passengerCount = _uiState.value.passengerCount,
                 requestedDriverId = _uiState.value.requestedDriverId,
                 riderName = currentUser?.fullName,
                 riderPhoneNumber = currentUser?.phoneNumber,
@@ -583,6 +695,7 @@ class BookingViewModel @Inject constructor(
                         it.copy(
                             isBooking = false,
                             bookingConfirmed = booking.id,
+                            activeBooking = booking,
                             requestedDriverId = null,
                             requestedDriverName = null
                         )
@@ -602,16 +715,13 @@ class BookingViewModel @Inject constructor(
     
     fun observeBooking(bookingId: String) {
         viewModelScope.launch {
-            // Clear any stale booking that doesn't match the requested bookingId
-            // This prevents showing wrong booking data during initial load
-            if (_uiState.value.activeBooking?.id != bookingId) {
-                _uiState.update { it.copy(isLoading = true, activeBooking = null) }
-            } else {
-                _uiState.update { it.copy(isLoading = true) }
-            }
+            // Don't clear activeBooking - just start loading and wait for Firestore
+            _uiState.update { it.copy(isLoading = true) }
             
             // Observe booking status
             bookingRepository.observeBooking(bookingId).collect { booking ->
+                android.util.Log.d("BookingVM", "Booking update: ${booking?.id}, status: ${booking?.status}, driverAdjustedFare: ${booking?.driverAdjustedFare}, riderAccepted: ${booking?.riderAcceptedAdjustment}")
+                
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -627,10 +737,12 @@ class BookingViewModel @Inject constructor(
                 // Handle driver fare adjustment - show dialog if driver adjusted fare
                 booking?.let { b ->
                     if (b.driverAdjustedFare != null && !b.riderAcceptedAdjustment) {
+                        android.util.Log.d("BookingVM", "Showing fare adjustment dialog: fare=${b.driverAdjustedFare}, driver=${b.driverName}")
                         _uiState.update { 
                             it.copy(
                                 driverAdjustedFare = b.driverAdjustedFare,
                                 fareAdjustmentReason = b.fareAdjustmentReason,
+                                fareAdjustmentDriverName = b.driverName,
                                 isNightRate = b.isNightRate,
                                 showFareAdjustmentDialog = true
                             )
@@ -662,6 +774,82 @@ class BookingViewModel @Inject constructor(
                     }
                 }
             }
+        }
+    }
+    
+    /**
+     * Start observing driver offers for the current booking
+     * Called when booking is in PENDING status
+     */
+    fun observeDriverOffers(bookingId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWaitingForOffers = true) }
+            
+            bookingRepository.observeDriverOffers(bookingId).collect { offers ->
+                android.util.Log.d("BookingVM", "Received ${offers.size} driver offers")
+                _uiState.update { it.copy(driverOffers = offers) }
+            }
+        }
+    }
+    
+    /**
+     * Accept a driver's price offer - this confirms the ride
+     */
+    fun acceptDriverOffer(offer: DriverOffer) {
+        val bookingId = _uiState.value.activeBooking?.id ?: return
+        
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            
+            val result = bookingRepository.acceptDriverOffer(bookingId, offer)
+            result.fold(
+                onSuccess = {
+                    android.util.Log.d("BookingVM", "Successfully accepted offer from ${offer.driverName} for $${offer.price}")
+                    _uiState.update { 
+                        it.copy(
+                            isLoading = false,
+                            isWaitingForOffers = false,
+                            driverOffers = emptyList(),
+                            estimatedFare = offer.price
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    android.util.Log.e("BookingVM", "Failed to accept offer: ${error.message}")
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = "Failed to accept offer: ${error.message}"
+                        )
+                    }
+                }
+            )
+        }
+    }
+    
+    /**
+     * Reject a driver's price offer - price too high
+     * Driver can then submit a new lower offer
+     */
+    fun rejectDriverOffer(offer: DriverOffer) {
+        val bookingId = _uiState.value.activeBooking?.id ?: return
+        
+        viewModelScope.launch {
+            val result = bookingRepository.rejectDriverOffer(bookingId, offer)
+            result.fold(
+                onSuccess = {
+                    android.util.Log.d("BookingVM", "Rejected offer from ${offer.driverName} - $${offer.price} was too high")
+                    // Remove the rejected offer from the list locally
+                    _uiState.update { state ->
+                        state.copy(
+                            driverOffers = state.driverOffers.filter { it.id != offer.id }
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    android.util.Log.e("BookingVM", "Failed to reject offer: ${error.message}")
+                }
+            )
         }
     }
     
@@ -734,6 +922,27 @@ class BookingViewModel @Inject constructor(
     
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
+    }
+    
+    /**
+     * Check for unrated completed bookings and set state to show rating popup
+     */
+    fun checkForUnratedBooking() {
+        viewModelScope.launch {
+            try {
+                val unratedBooking = bookingRepository.getUnratedCompletedBooking()
+                if (unratedBooking != null) {
+                    android.util.Log.d("BookingVM", "Found unrated booking: ${unratedBooking.id}")
+                    _uiState.update { it.copy(unratedBookingId = unratedBooking.id) }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("BookingVM", "Error checking for unrated booking", e)
+            }
+        }
+    }
+    
+    fun clearUnratedBooking() {
+        _uiState.update { it.copy(unratedBookingId = null) }
     }
     
     /**

@@ -17,6 +17,7 @@ data class Advertisement(
     val imageUrl: String? = null, // Can be local file path or remote URL
     val logoUrl: String? = null, // Business logo for map markers
     val youtubeUrl: String? = null, // YouTube video URL
+    val videoUrl: String? = null, // Direct MP4/video URL (e.g., http://example.com/video.mp4)
     val websiteUrl: String? = null,
     val phoneNumber: String? = null,
     val email: String? = null,
@@ -107,6 +108,15 @@ enum class AdCategory {
     @PropertyName("health")
     HEALTH,
     
+    @PropertyName("hospital")
+    HOSPITAL,
+    
+    @PropertyName("doctor")
+    DOCTOR,
+    
+    @PropertyName("emergency")
+    EMERGENCY,
+    
     @PropertyName("general")
     GENERAL;
     
@@ -125,7 +135,10 @@ enum class AdCategory {
             TOURISM -> "🗺️"
             SHOPPING -> "🛍️"
             ENTERTAINMENT -> "🎭"
-            HEALTH -> "🏥"
+            HEALTH -> "💊"
+            HOSPITAL -> "🏥"
+            DOCTOR -> "👨‍⚕️"
+            EMERGENCY -> "🚨"
             GENERAL -> "📢"
         }
     }
@@ -152,7 +165,8 @@ enum class AdPlan(
     val displayName: String,
     val days: Int,
     val price: Double,
-    val featuredPrice: Double
+    val featuredPrice: Double,
+    val isAutoRenew: Boolean = false
 ) {
     @PropertyName("one_day")
     ONE_DAY("1 Day", 1, 4.99, 9.99),
@@ -167,7 +181,10 @@ enum class AdPlan(
     TWO_WEEKS("2 Weeks", 14, 29.99, 54.99),
     
     @PropertyName("one_month")
-    ONE_MONTH("1 Month", 30, 49.99, 89.99);
+    ONE_MONTH("1 Month", 30, 49.99, 89.99),
+    
+    @PropertyName("monthly_auto")
+    MONTHLY_AUTO("Monthly (Auto-Renew)", 30, 49.99, 89.99, true);  // Auto-renewing subscription
     
     fun getPricePerDay(isFeatured: Boolean): Double {
         val totalPrice = if (isFeatured) featuredPrice else price
@@ -176,25 +193,25 @@ enum class AdPlan(
 }
 
 enum class AdStatus {
-    @PropertyName("pending")
+    @PropertyName("PENDING")
     PENDING,        // Awaiting payment
     
-    @PropertyName("review")
+    @PropertyName("REVIEW")
     REVIEW,         // Under review after payment
     
-    @PropertyName("active")
+    @PropertyName("ACTIVE")
     ACTIVE,         // Currently running
     
-    @PropertyName("paused")
+    @PropertyName("PAUSED")
     PAUSED,         // Temporarily paused
     
-    @PropertyName("expired")
+    @PropertyName("EXPIRED")
     EXPIRED,        // Campaign ended
     
-    @PropertyName("rejected")
+    @PropertyName("REJECTED")
     REJECTED,       // Rejected by admin
     
-    @PropertyName("draft")
+    @PropertyName("DRAFT")
     DRAFT           // Draft ads that need payment to activate (from AI generator)
 }
 

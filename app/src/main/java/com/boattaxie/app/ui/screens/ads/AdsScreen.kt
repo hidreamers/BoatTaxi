@@ -4,11 +4,14 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -33,9 +37,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.boattaxie.app.BuildConfig
+import com.boattaxie.app.R
 import com.boattaxie.app.data.model.*
 import com.boattaxie.app.ui.components.*
 import com.boattaxie.app.ui.theme.*
@@ -43,6 +53,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.UUID
+import android.content.Context
 
 /**
  * Extract YouTube video ID from various YouTube URL formats
@@ -126,6 +138,9 @@ fun AdDetailsScreen(
                     .padding(paddingValues)
                     .verticalScroll(rememberScrollState())
             ) {
+                // Check for direct video URL (MP4, WebM, etc.)
+                val hasDirectVideo = !ad.videoUrl.isNullOrBlank()
+                
                 // Image - handle local files or YouTube thumbnail fallback
                 val hasLocalImage = remember(ad.imageUrl) {
                     if (ad.imageUrl.isNullOrBlank()) {
@@ -141,7 +156,66 @@ fun AdDetailsScreen(
                 }
                 val youtubeVideoId = ad.youtubeUrl?.let { extractYouTubeVideoId(it) }
                 
-                if (hasLocalImage && !ad.imageUrl.isNullOrBlank()) {
+                // Priority: Direct Video > Local Image > YouTube Thumbnail > Placeholder
+                if (hasDirectVideo) {
+                    // Inline video player for MP4/WebM/HLS videos
+                    val context = LocalContext.current
+                    var isPlaying by remember { mutableStateOf(false) }
+                    
+                    val exoPlayer = remember(ad.videoUrl) {
+                        ExoPlayer.Builder(context).build().apply {
+                            val mediaItem = MediaItem.fromUri(ad.videoUrl!!)
+                            setMediaItem(mediaItem)
+                            repeatMode = Player.REPEAT_MODE_ONE
+                            prepare()
+                        }
+                    }
+                    
+                    DisposableEffect(exoPlayer) {
+                        onDispose {
+                            exoPlayer.release()
+                        }
+                    }
+                    
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                    ) {
+                        AndroidView(
+                            factory = { ctx ->
+                                PlayerView(ctx).apply {
+                                    player = exoPlayer
+                                    useController = true
+                                    layoutParams = FrameLayout.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        
+                        // Play button overlay when not playing
+                        if (!isPlaying) {
+                            Surface(
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .size(64.dp),
+                                shape = androidx.compose.foundation.shape.CircleShape,
+                                color = Primary.copy(alpha = 0.9f),
+                                onClick = {
+                                    isPlaying = true
+                                    exoPlayer.play()
+                                }
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("▶", color = Color.White, style = MaterialTheme.typography.headlineMedium)
+                                }
+                            }
+                        }
+                    }
+                } else if (hasLocalImage && !ad.imageUrl.isNullOrBlank()) {
                     val imageModel = remember(ad.imageUrl) {
                         if (ad.imageUrl.startsWith("/")) {
                             File(ad.imageUrl)
@@ -155,7 +229,8 @@ fun AdDetailsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(200.dp),
-                        contentScale = ContentScale.Crop,
+                        contentScale = ContentScale.Fit,
+                        alignment = Alignment.Center,
                         onError = { android.util.Log.e("AdDetails", "Image load error: ${it.result.throwable}") }
                     )
                 } else if (youtubeVideoId != null) {
@@ -201,13 +276,8 @@ fun AdDetailsScreen(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = ad.category.getIcon(),
-                                fontSize = 72.sp
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = ad.category.getDisplayName(),
-                                style = MaterialTheme.typography.headlineSmall,
+                                text = ad.businessName.take(2).uppercase(),
+                                fontSize = 48.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
@@ -263,28 +333,18 @@ fun AdDetailsScreen(
                 }
                 
                 Column(modifier = Modifier.padding(16.dp)) {
-                    // Category and featured badge
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${ad.category.getIcon()} ${ad.category.getDisplayName()}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextSecondary
-                        )
-                        if (ad.isFeatured) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Surface(
-                                color = SponsoredBadge,
-                                shape = MaterialTheme.shapes.extraSmall
-                            ) {
-                                Text(
-                                    text = "FEATURED",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextOnPrimary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
+                    // Featured badge only (category removed)
+                    if (ad.isFeatured) {
+                        Surface(
+                            color = SponsoredBadge,
+                            shape = MaterialTheme.shapes.extraSmall
+                        ) {
+                            Text(
+                                text = "FEATURED",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextOnPrimary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
                         }
                     }
                     
@@ -517,46 +577,69 @@ fun CreateAdScreen(
     var couponDescription by remember { mutableStateOf("") }
     var couponMaxRedemptions by remember { mutableStateOf("") }
     
-    // Promo code for advertisers
-    var promoCode by remember { mutableStateOf("") }
-    var promoApplied by remember { mutableStateOf(false) }
-    var promoMessage by remember { mutableStateOf("") }
-    
     // Card payment flow
     var showPaymentConfirmDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = context as? Activity
     val scope = rememberCoroutineScope()
     
-    // Valid promo codes
-    val validPromoCodes = mapOf(
-        "FREE2WEEKS" to "First 2 weeks FREE on monthly plan!",
-        "BOATTAXIE50" to "50% off your first ad!",
-        "WELCOME" to "First 2 weeks FREE on monthly plan!",
-        "ADFREE" to "2 Weeks Advertising 100% FREE!",
-        "BOCAS2025" to "2 Weeks Advertising 100% FREE!",
-        "TESTFREE" to "Testing Mode - Any Ad FREE!"
-    )
-    
-    // Calculate discounted price (moved outside for dialog access)
+    // Calculate price (only free for lifetime codes)
     val basePrice = if (isFeatured) selectedPlan.featuredPrice else selectedPlan.price
-    val isTestMode = promoApplied && promoCode.uppercase() == "TESTFREE"
-    val isTotallyFree = isTestMode || (promoApplied && (promoCode.uppercase() == "ADFREE" || promoCode.uppercase() == "BOCAS2025") && selectedPlan == AdPlan.TWO_WEEKS)
-    val discountedPrice = when {
-        isTotallyFree -> 0.0 // Completely free for testing or with ADFREE/BOCAS2025 code
-        promoApplied && (promoCode.uppercase() == "FREE2WEEKS" || promoCode.uppercase() == "WELCOME") && selectedPlan == AdPlan.ONE_MONTH -> basePrice / 2
-        promoApplied && promoCode.uppercase() == "BOATTAXIE50" -> basePrice / 2
-        else -> basePrice
-    }
+    val userHasFreeAdsForLife = uiState.hasFreeAdsForLife
+    val isTotallyFree = userHasFreeAdsForLife
+    val discountedPrice = if (isTotallyFree) 0.0 else basePrice
     val hasDiscount = discountedPrice < basePrice
+    
+    // Helper function to copy image to app's internal storage for persistence
+    fun copyImageToInternalStorage(context: Context, sourceUri: Uri, prefix: String): Uri? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(sourceUri)
+            if (inputStream != null) {
+                val fileName = "${prefix}_${UUID.randomUUID()}.jpg"
+                val outputFile = File(context.cacheDir, fileName)
+                outputFile.outputStream().use { outputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+                inputStream.close()
+                android.util.Log.d("AdsScreen", "Copied image to: ${outputFile.absolutePath}")
+                Uri.fromFile(outputFile)
+            } else {
+                android.util.Log.e("AdsScreen", "Could not open input stream for URI: $sourceUri")
+                null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AdsScreen", "Failed to copy image: ${e.message}", e)
+            null
+        }
+    }
     
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
-    ) { uri -> imageUri = uri }
+    ) { uri ->
+        if (uri != null) {
+            // Copy to internal storage immediately to preserve access
+            scope.launch(Dispatchers.IO) {
+                val localUri = copyImageToInternalStorage(context, uri, "ad_image")
+                withContext(Dispatchers.Main) {
+                    imageUri = localUri ?: uri  // Fall back to original if copy fails
+                }
+            }
+        }
+    }
     
     val logoLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
-    ) { uri -> logoUri = uri }
+    ) { uri ->
+        if (uri != null) {
+            // Copy to internal storage immediately to preserve access
+            scope.launch(Dispatchers.IO) {
+                val localUri = copyImageToInternalStorage(context, uri, "ad_logo")
+                withContext(Dispatchers.Main) {
+                    logoUri = localUri ?: uri  // Fall back to original if copy fails
+                }
+            }
+        }
+    }
     
     // Reset the adCreated flag when screen is opened
     LaunchedEffect(Unit) {
@@ -593,10 +676,10 @@ fun CreateAdScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Create Ad") },
+                title = { Text(stringResource(R.string.create_ad_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.Close, "Close")
+                        Icon(Icons.Default.Close, stringResource(R.string.close))
                     }
                 }
             )
@@ -629,7 +712,7 @@ fun CreateAdScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "How Your Ad Will Be Shown",
+                            text = stringResource(R.string.how_ad_shown),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF1565C0)
@@ -642,7 +725,7 @@ fun CreateAdScreen(
                         Text("📍", fontSize = 16.sp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Your ad appears as a marker on the map for all riders in your area",
+                            text = stringResource(R.string.ad_map_info),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0xFF1976D2)
                         )
@@ -654,7 +737,7 @@ fun CreateAdScreen(
                         Text("⭐", fontSize = 16.sp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Featured ads get a highlighted marker and priority placement",
+                            text = stringResource(R.string.ad_featured_info),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0xFF1976D2)
                         )
@@ -666,7 +749,7 @@ fun CreateAdScreen(
                         Text("🎟️", fontSize = 16.sp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Add a coupon to attract more customers - they can tap to redeem!",
+                            text = stringResource(R.string.ad_coupon_info),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0xFF1976D2)
                         )
@@ -678,7 +761,7 @@ fun CreateAdScreen(
                         Text("🖼️", fontSize = 16.sp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Upload your logo - it shows directly on the map marker!",
+                            text = stringResource(R.string.ad_logo_info),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0xFF1976D2)
                         )
@@ -700,7 +783,8 @@ fun CreateAdScreen(
                         model = imageUri,
                         contentDescription = "Ad Image",
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+                        contentScale = ContentScale.Fit,
+                        alignment = Alignment.Center
                     )
                 } else {
                     Column(
@@ -716,7 +800,7 @@ fun CreateAdScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Add Image",
+                            text = stringResource(R.string.add_image),
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary
                         )
@@ -728,7 +812,7 @@ fun CreateAdScreen(
             
             // Logo upload - shows on map markers
             Text(
-                text = "Business Logo (shows on map)",
+                text = stringResource(R.string.business_logo),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Medium,
                 color = TextPrimary
@@ -746,7 +830,8 @@ fun CreateAdScreen(
                             model = logoUri,
                             contentDescription = "Logo",
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
+                            contentScale = ContentScale.Fit,
+                            alignment = Alignment.Center
                         )
                     } else {
                         Column(
@@ -761,7 +846,7 @@ fun CreateAdScreen(
                                 tint = TextSecondary
                             )
                             Text(
-                                text = "Logo",
+                                text = stringResource(R.string.logo),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = TextSecondary
                             )
@@ -770,7 +855,7 @@ fun CreateAdScreen(
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "Upload a square logo for your business.\nThis will appear on the map marker.",
+                    text = stringResource(R.string.upload_logo_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
@@ -778,17 +863,24 @@ fun CreateAdScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // YouTube Video URL
+            // Video URL (YouTube or direct MP4)
             OutlinedTextField(
                 value = youtubeUrl,
                 onValueChange = { youtubeUrl = it },
-                label = { Text("YouTube Video URL (optional)") },
+                label = { Text("Video URL (Optional)") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 leadingIcon = { 
-                    Text("▶", color = Color(0xFFFF0000), style = MaterialTheme.typography.titleMedium) 
+                    Text("▶", color = Primary, style = MaterialTheme.typography.titleMedium) 
                 },
-                placeholder = { Text("https://youtube.com/watch?v=...") }
+                placeholder = { Text("YouTube or MP4 link (e.g., example.com/video.mp4)") },
+                supportingText = { 
+                    Text(
+                        "Supports YouTube links or direct video URLs (.mp4)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
             )
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -797,7 +889,7 @@ fun CreateAdScreen(
             OutlinedTextField(
                 value = businessName,
                 onValueChange = { businessName = it },
-                label = { Text("Business Name") },
+                label = { Text(stringResource(R.string.business_name)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -807,7 +899,7 @@ fun CreateAdScreen(
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text("Ad Title") },
+                label = { Text(stringResource(R.string.ad_title_label)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -817,7 +909,7 @@ fun CreateAdScreen(
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
-                label = { Text("Description") },
+                label = { Text(stringResource(R.string.description)) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
                 maxLines = 5
@@ -827,7 +919,7 @@ fun CreateAdScreen(
             
             // Category dropdown
             Text(
-                text = "Category",
+                text = stringResource(R.string.category),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium
             )
@@ -850,12 +942,12 @@ fun CreateAdScreen(
             
             // ============ LOCATION SECTION ============
             Text(
-                text = "📍 Business Location",
+                text = stringResource(R.string.business_location),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Choose your business location to show on the map",
+                text = stringResource(R.string.location_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary
             )
@@ -887,13 +979,13 @@ fun CreateAdScreen(
                     Spacer(modifier = Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Choose on Map",
+                            text = stringResource(R.string.choose_on_map),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Primary
                         )
                         Text(
-                            text = if (locationLat.isNotBlank()) "Location selected ✓" else "Tap on map to select",
+                            text = if (locationLat.isNotBlank()) stringResource(R.string.location_selected) else stringResource(R.string.tap_to_select_location),
                             style = MaterialTheme.typography.bodySmall,
                             color = if (locationLat.isNotBlank()) Success else TextSecondary
                         )
@@ -962,7 +1054,7 @@ fun CreateAdScreen(
             val coroutineScope = rememberCoroutineScope()
             
             Text(
-                text = "Or search by name:",
+                text = stringResource(R.string.or_search_by_name),
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 modifier = Modifier.padding(bottom = 4.dp)
@@ -985,7 +1077,7 @@ fun CreateAdScreen(
                     }
                     // Search is triggered by LaunchedEffect with debouncing
                 },
-                label = { Text("Search location...") },
+                label = { Text(stringResource(R.string.search_location)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Search, null) },
@@ -995,11 +1087,11 @@ fun CreateAdScreen(
                             locationQuery = ""
                             viewModel.clearLocationSearch()
                         }) {
-                            Icon(Icons.Default.Clear, "Clear")
+                            Icon(Icons.Default.Clear, stringResource(R.string.close))
                         }
                     }
                 },
-                placeholder = { Text("e.g., Casco Viejo, Panama City") }
+                placeholder = { Text(stringResource(R.string.search_example)) }
             )
             
             // Show search results
@@ -1115,7 +1207,7 @@ fun CreateAdScreen(
                             locationLng = ""
                             locationQuery = ""
                         }) {
-                            Icon(Icons.Default.Close, "Remove", tint = TextSecondary)
+                            Icon(Icons.Default.Close, stringResource(R.string.remove), tint = TextSecondary)
                         }
                     }
                 }
@@ -1125,7 +1217,7 @@ fun CreateAdScreen(
             
             // Quick location buttons for popular Panama areas
             Text(
-                text = "Or select popular area:",
+                text = stringResource(R.string.or_select_area),
                 style = MaterialTheme.typography.labelSmall,
                 color = TextSecondary
             )
@@ -1192,12 +1284,12 @@ fun CreateAdScreen(
                     ) {
                         Column {
                             Text(
-                                text = "🎟️ Add Coupon",
+                                text = stringResource(R.string.add_coupon),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Attract more customers with a special offer",
+                                text = stringResource(R.string.coupon_attract),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
@@ -1220,7 +1312,7 @@ fun CreateAdScreen(
                         OutlinedTextField(
                             value = couponCode,
                             onValueChange = { couponCode = it.uppercase() },
-                            label = { Text("Coupon Code") },
+                            label = { Text(stringResource(R.string.coupon_code_label)) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             leadingIcon = { 
@@ -1238,7 +1330,7 @@ fun CreateAdScreen(
                                         )
                                     }
                                 ) {
-                                    Icon(Icons.Default.Refresh, "Generate New Code")
+                                    Icon(Icons.Default.Refresh, stringResource(R.string.generate_new_code))
                                 }
                             }
                         )
@@ -1247,7 +1339,7 @@ fun CreateAdScreen(
                         
                         // Discount type - quick options
                         Text(
-                            text = "Discount:",
+                            text = stringResource(R.string.discount_label),
                             style = MaterialTheme.typography.labelMedium
                         )
                         Spacer(modifier = Modifier.height(4.dp))
@@ -1286,10 +1378,10 @@ fun CreateAdScreen(
                         OutlinedTextField(
                             value = couponDiscount,
                             onValueChange = { couponDiscount = it },
-                            label = { Text("Or custom discount") },
+                            label = { Text(stringResource(R.string.or_custom_discount)) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            placeholder = { Text("e.g., FREE APPETIZER") }
+                            placeholder = { Text(stringResource(R.string.custom_discount_placeholder)) }
                         )
                         
                         Spacer(modifier = Modifier.height(12.dp))
@@ -1297,10 +1389,10 @@ fun CreateAdScreen(
                         OutlinedTextField(
                             value = couponDescription,
                             onValueChange = { couponDescription = it },
-                            label = { Text("Coupon Details (optional)") },
+                            label = { Text(stringResource(R.string.coupon_details_optional)) },
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 2,
-                            placeholder = { Text("e.g., Valid for dine-in only. Min. purchase $20") }
+                            placeholder = { Text(stringResource(R.string.coupon_details_placeholder)) }
                         )
                         
                         Spacer(modifier = Modifier.height(12.dp))
@@ -1308,10 +1400,10 @@ fun CreateAdScreen(
                         OutlinedTextField(
                             value = couponMaxRedemptions,
                             onValueChange = { couponMaxRedemptions = it.filter { c -> c.isDigit() } },
-                            label = { Text("Max Redemptions (leave empty for unlimited)") },
+                            label = { Text(stringResource(R.string.max_redemptions)) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            placeholder = { Text("e.g., 100") }
+                            placeholder = { Text(stringResource(R.string.max_redemptions_placeholder)) }
                         )
                         
                         // Preview
@@ -1326,7 +1418,7 @@ fun CreateAdScreen(
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     Text(
-                                        text = "🎟️ COUPON PREVIEW",
+                                        text = stringResource(R.string.coupon_preview),
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -1361,7 +1453,7 @@ fun CreateAdScreen(
             
             // Contact info
             Text(
-                text = "Contact Info",
+                text = stringResource(R.string.contact_info),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium
             )
@@ -1370,7 +1462,7 @@ fun CreateAdScreen(
             OutlinedTextField(
                 value = phone,
                 onValueChange = { phone = it },
-                label = { Text("Phone (optional)") },
+                label = { Text(stringResource(R.string.phone_optional)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Phone, null) }
@@ -1381,7 +1473,7 @@ fun CreateAdScreen(
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
-                label = { Text("Email (optional)") },
+                label = { Text(stringResource(R.string.email_optional)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Email, null) }
@@ -1392,7 +1484,7 @@ fun CreateAdScreen(
             OutlinedTextField(
                 value = website,
                 onValueChange = { website = it },
-                label = { Text("Website (optional)") },
+                label = { Text(stringResource(R.string.website_optional)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Language, null) }
@@ -1402,7 +1494,7 @@ fun CreateAdScreen(
             
             // Ad plan selection
             Text(
-                text = "Ad Duration",
+                text = stringResource(R.string.ad_duration),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium,
                 color = TextPrimary
@@ -1412,35 +1504,68 @@ fun CreateAdScreen(
             AdPlan.values().forEach { plan ->
                 val price = if (isFeatured) plan.featuredPrice else plan.price
                 val isSelected = selectedPlan == plan
+                val isAutoRenew = plan.isAutoRenew
                 Card(
                     onClick = { selectedPlan = plan },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isSelected) Primary else Color(0xFFF5F5F5)
+                        containerColor = if (isSelected) Primary else if (isAutoRenew) Primary.copy(alpha = 0.1f) else Color(0xFFF5F5F5)
                     ),
-                    border = if (!isSelected) BorderStroke(1.dp, Color(0xFFE0E0E0)) else null
+                    border = when {
+                        isSelected -> null
+                        isAutoRenew -> BorderStroke(2.dp, Primary)
+                        else -> BorderStroke(1.dp, Color(0xFFE0E0E0))
+                    }
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = plan.displayName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isSelected) Color.White else Color(0xFF212121)
-                        )
-                        Text(
-                            text = "$${String.format("%.2f", price)}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSelected) Color.White else Color(0xFF212121)
-                        )
+                    Column {
+                        // Badge for auto-renew
+                        if (isAutoRenew) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Primary)
+                                    .padding(vertical = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "🔄 AUTO-RENEW SUBSCRIPTION",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = plan.displayName,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (isSelected) Color.White else Color(0xFF212121)
+                                )
+                                if (isAutoRenew) {
+                                    Text(
+                                        text = "Cancel anytime",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isSelected) Color.White.copy(alpha = 0.7f) else TextSecondary
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "$${String.format("%.2f", price)}" + if (isAutoRenew) "/mo" else "",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.White else Color(0xFF212121)
+                            )
+                        }
                     }
                 }
             }
@@ -1455,12 +1580,12 @@ fun CreateAdScreen(
             ) {
                 Column {
                     Text(
-                        text = "Featured Ad",
+                        text = stringResource(R.string.featured_ad_label),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        text = "Get more visibility",
+                        text = stringResource(R.string.get_more_visibility),
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
@@ -1473,119 +1598,128 @@ fun CreateAdScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Promo Code Section
-            Text(
-                text = "Have a Promo Code?",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                color = TextPrimary
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                OutlinedTextField(
-                    value = promoCode,
-                    onValueChange = { 
-                        promoCode = it.uppercase()
-                        promoApplied = false
-                        promoMessage = ""
-                    },
-                    label = { Text("Promo Code") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    enabled = !promoApplied
-                )
-                Button(
-                    onClick = {
-                        val upperCode = promoCode.uppercase().trim()
-                        if (validPromoCodes.containsKey(upperCode)) {
-                            promoApplied = true
-                            promoMessage = validPromoCodes[upperCode] ?: ""
-                            // Force monthly plan for FREE2WEEKS promo
-                            if (upperCode == "FREE2WEEKS" || upperCode == "WELCOME") {
-                                selectedPlan = AdPlan.ONE_MONTH
-                            }
-                        } else if (upperCode.isNotBlank()) {
-                            promoMessage = "Invalid promo code"
-                        }
-                    },
-                    enabled = promoCode.isNotBlank() && !promoApplied,
-                    modifier = Modifier.height(56.dp)
-                ) {
-                    Text(if (promoApplied) "Applied ✓" else "Apply")
-                }
-            }
-            
-            if (promoMessage.isNotBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
+            // Free Featured Offer Section (One-Time Use)
+            if (!uiState.usedFreeFeaturedOffer) {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !uiState.isClaimingFreeOffer) {
+                            // Validate required fields first
+                            if (title.isBlank()) {
+                                // Show error - need title
+                                return@clickable
+                            }
+                            if (description.isBlank()) {
+                                // Show error - need description
+                                return@clickable
+                            }
+                            
+                            // Claim the free featured offer
+                            val location = if (locationLat.isNotBlank() && locationLng.isNotBlank()) {
+                                try {
+                                    GeoLocation(
+                                        latitude = locationLat.toDouble(),
+                                        longitude = locationLng.toDouble(),
+                                        address = locationName.ifBlank { null }
+                                    )
+                                } catch (e: Exception) {
+                                    null
+                                }
+                            } else null
+                            
+                            viewModel.claimFreeFeaturedOffer(
+                                businessName = businessName,
+                                title = title,
+                                description = description,
+                                imageUri = imageUri,
+                                logoUri = logoUri,
+                                websiteUrl = website,
+                                phoneNumber = phone,
+                                email = email,
+                                location = location,
+                                locationName = locationName,
+                                category = selectedCategory,
+                                hasCoupon = hasCoupon,
+                                couponCode = couponCode.takeIf { hasCoupon && it.isNotBlank() },
+                                couponDiscount = couponDiscount.takeIf { hasCoupon && it.isNotBlank() },
+                                couponDescription = couponDescription.takeIf { hasCoupon && it.isNotBlank() },
+                                couponMaxRedemptions = couponMaxRedemptions.toIntOrNull()?.takeIf { hasCoupon },
+                                onSuccess = { onNavigateBack() }
+                            )
+                        },
                     colors = CardDefaults.cardColors(
-                        containerColor = if (promoApplied) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
-                    )
+                        containerColor = Color(0xFFE8F5E9)
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = if (promoApplied) "🎉" else "❌",
-                            fontSize = 18.sp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = promoMessage,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (promoApplied) Color(0xFF2E7D32) else Color(0xFFC62828),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-                
-                // Show promo details for FREE2WEEKS
-                if (promoApplied && (promoCode.uppercase() == "FREE2WEEKS" || promoCode.uppercase() == "WELCOME")) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1))
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "📅 How it works:",
+                                text = "🎁 Click here to get your 2 weeks FREE featured advertising now!",
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFF8F00)
+                                color = Color(0xFF2E7D32)
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "• Your ad runs for the full month (30 days)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF5D4037)
-                            )
-                            Text(
-                                text = "• First 2 weeks are completely FREE",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF5D4037)
-                            )
-                            Text(
-                                text = "• You only pay for weeks 3 & 4",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF5D4037)
-                            )
-                            Text(
-                                text = "• Cancel anytime during free period!",
+                                text = "1 time use only",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFF5D4037)
                             )
                         }
+                        if (uiState.isClaimingFreeOffer) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Color(0xFF2E7D32),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.ArrowForward,
+                                contentDescription = "Claim",
+                                tint = Color(0xFF2E7D32)
+                            )
+                        }
                     }
                 }
+                
+                // Show result message for free offer
+                if (uiState.freeOfferMessage != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (uiState.freeOfferClaimSuccess) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (uiState.freeOfferClaimSuccess) "🎉" else "❌",
+                                fontSize = 18.sp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = uiState.freeOfferMessage ?: "",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (uiState.freeOfferClaimSuccess) Color(0xFF2E7D32) else Color(0xFFC62828),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
             }
             
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             
             // Total price
             Card(
@@ -1605,7 +1739,7 @@ fun CreateAdScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Total",
+                            text = stringResource(R.string.total_label),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -1630,7 +1764,7 @@ fun CreateAdScreen(
                     if (hasDiscount) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "🎉 You save $${String.format("%.2f", basePrice - discountedPrice)} with promo code!",
+                            text = stringResource(R.string.you_save_promo, String.format("%.2f", basePrice - discountedPrice)),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
                             color = Color(0xFF2E7D32)
@@ -1656,13 +1790,13 @@ fun CreateAdScreen(
                         Text("🎉", fontSize = 40.sp)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Your ad is FREE!",
+                            text = stringResource(R.string.ad_is_free),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = Success
                         )
                         Text(
-                            text = "No payment required with code: ${promoCode.uppercase()}",
+                            text = "Lifetime Free Advertiser - No payment required!",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary
                         )
@@ -1685,13 +1819,21 @@ fun CreateAdScreen(
                             }
                         } else null
                         
+                        // Determine if video URL is direct (MP4) or YouTube
+                        val videoUrlInput = youtubeUrl.trim()
+                        val isDirectVideoUrl = videoUrlInput.endsWith(".mp4", ignoreCase = true) ||
+                            videoUrlInput.endsWith(".webm", ignoreCase = true) ||
+                            videoUrlInput.endsWith(".m3u8", ignoreCase = true) ||
+                            videoUrlInput.contains(".mp4", ignoreCase = true)
+                        
                         viewModel.createAd(
                             businessName = businessName,
                             title = title,
                             description = description,
                             imageUri = imageUri,
                             logoUri = logoUri,
-                            youtubeUrl = youtubeUrl.ifBlank { null },
+                            youtubeUrl = if (!isDirectVideoUrl) videoUrlInput.ifBlank { null } else null,
+                            videoUrl = if (isDirectVideoUrl) videoUrlInput.ifBlank { null } else null,
                             phone = phone.ifBlank { null },
                             email = email.ifBlank { null },
                             website = website.ifBlank { null },
@@ -1726,7 +1868,7 @@ fun CreateAdScreen(
                             Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Submit FREE Ad",
+                                text = stringResource(R.string.submit_free_ad),
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -1734,7 +1876,7 @@ fun CreateAdScreen(
                     }
                 }
             } else {
-                // Stripe Payment Flow
+                // Google Play Payment Flow
                 Button(
                     onClick = {
                         Toast.makeText(activity, "Pay button clicked", Toast.LENGTH_SHORT).show()
@@ -1761,7 +1903,8 @@ fun CreateAdScreen(
                                     website = website.ifBlank { null },
                                     category = selectedCategory.name,
                                     location = if (locationName.isNotBlank()) locationName else null,
-                                    userId = userId
+                                    userId = userId,
+                                    isAutoRenew = selectedPlan.isAutoRenew
                                 )
                                 Log.d("AdsScreen", "createAdCheckoutSession result: $success")
                                 if (!success) {
@@ -1781,7 +1924,7 @@ fun CreateAdScreen(
                         Text("💳", fontSize = 20.sp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Pay with Stripe - $${String.format("%.2f", discountedPrice)}",
+                            text = stringResource(R.string.pay_with_google_play, String.format("%.2f", discountedPrice)),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -1791,7 +1934,7 @@ fun CreateAdScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 Text(
-                    text = "Payment required to submit your ad",
+                    text = stringResource(R.string.payment_required),
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
                     textAlign = TextAlign.Center,
@@ -1812,7 +1955,7 @@ fun CreateAdScreen(
             },
             title = {
                 Text(
-                    "Confirm Payment",
+                    stringResource(R.string.confirm_payment_title),
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
@@ -1822,12 +1965,12 @@ fun CreateAdScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "Did you complete the credit card payment of $${String.format("%.2f", discountedPrice)}?",
+                        stringResource(R.string.payment_confirm_question, String.format("%.2f", discountedPrice)),
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "By confirming, your ${selectedPlan.displayName} ad for \"$businessName\" will be submitted for review.",
+                        stringResource(R.string.payment_confirm_desc, selectedPlan.displayName, businessName),
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary,
                         textAlign = TextAlign.Center
@@ -1877,12 +2020,12 @@ fun CreateAdScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Success)
                 ) {
-                    Text("Yes, Submit My Ad")
+                    Text(stringResource(R.string.yes_submit_ad))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showPaymentConfirmDialog = false }) {
-                    Text("Not Yet")
+                    Text(stringResource(R.string.not_yet))
                 }
             }
         )
@@ -2088,7 +2231,8 @@ fun MyAdsScreen(
                                     category = ad.category.name,
                                     location = ad.locationName,
                                     userId = userId,
-                                    existingAdId = ad.id // Pass existing ad ID for activation
+                                    existingAdId = ad.id, // Pass existing ad ID for activation
+                                    isAutoRenew = selectedActivationPlan.isAutoRenew
                                 )
                             }
                         }
@@ -2154,7 +2298,7 @@ fun MyAdsScreen(
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("How many ads?") },
+                        label = { Text(stringResource(R.string.how_many_ads)) },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
@@ -2173,12 +2317,12 @@ fun MyAdsScreen(
                     },
                     enabled = aiDescription.isNotBlank()
                 ) {
-                    Text("Generate Drafts")
+                    Text(stringResource(R.string.generate_drafts))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAiDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -2187,23 +2331,27 @@ fun MyAdsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("My Ads") },
+                title = { Text(stringResource(R.string.my_ads)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
+                        Icon(Icons.Default.ArrowBack, stringResource(R.string.back))
                     }
                 },
                 actions = {
+                    // Refresh button to get updated stats
+                    IconButton(onClick = { viewModel.loadMyAds() }) {
+                        Icon(Icons.Default.Refresh, stringResource(R.string.refresh_ads))
+                    }
                     // AI Ad Generator button
                     IconButton(onClick = { showAiDialog = true }) {
-                        Icon(Icons.Default.AutoAwesome, "AI Ad Generator")
+                        Icon(Icons.Default.AutoAwesome, stringResource(R.string.ai_ad_generator))
                     }
                 }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onNavigateToCreateAd) {
-                Icon(Icons.Default.Add, "Create Ad")
+                Icon(Icons.Default.Add, stringResource(R.string.create_ad))
             }
         }
     ) { paddingValues ->
@@ -2217,9 +2365,9 @@ fun MyAdsScreen(
             ) {
                 EmptyState(
                     icon = Icons.Default.Campaign,
-                    title = "No Ads Yet",
-                    message = "You haven't created any ads. Start advertising your business!",
-                    actionText = "Create Ad",
+                    title = stringResource(R.string.no_ads_yet),
+                    message = stringResource(R.string.no_ads_message),
+                    actionText = stringResource(R.string.create_ad),
                     onAction = onNavigateToCreateAd
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -2228,7 +2376,7 @@ fun MyAdsScreen(
                 ) {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("AI Ad Generator")
+                    Text(stringResource(R.string.ai_ad_generator))
                 }
             }
         } else {
@@ -2239,6 +2387,85 @@ fun MyAdsScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Subscription Status Card
+                item {
+                    if (uiState.hasActiveSubscription && uiState.subscription != null) {
+                        val remainingDays = SubscriptionHelper.getRemainingDays(uiState.subscription!!)
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Success.copy(alpha = 0.1f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = Success,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "🚀 Ride Subscription Active",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Success
+                                    )
+                                    Text(
+                                        text = "$remainingDays day${if (remainingDays != 1) "s" else ""} remaining",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextSecondary
+                                    )
+                                }
+                                Surface(
+                                    color = Success,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = "${remainingDays}d",
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Free Ads for Life banner
+                    if (uiState.hasFreeAdsForLife) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Primary.copy(alpha = 0.1f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("🎁", fontSize = 24.sp)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "FREE Ads for Life!",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Primary
+                                    )
+                                    Text(
+                                        text = "Your promo code is active",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                
                 items(uiState.myAds) { ad ->
                     MyAdCard(
                         ad = ad,
@@ -2286,6 +2513,31 @@ private fun MyAdCard(
 ) {
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    // Helper function to copy image to internal storage for persistence
+    fun copyImageToInternalStorage(sourceUri: Uri, prefix: String): Uri? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(sourceUri)
+            if (inputStream != null) {
+                val fileName = "${prefix}_${UUID.randomUUID()}.jpg"
+                val outputFile = File(context.cacheDir, fileName)
+                outputFile.outputStream().use { outputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+                inputStream.close()
+                android.util.Log.d("AdsScreen", "Copied edit image to: ${outputFile.absolutePath}")
+                Uri.fromFile(outputFile)
+            } else {
+                android.util.Log.e("AdsScreen", "Could not open input stream for URI: $sourceUri")
+                null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AdsScreen", "Failed to copy edit image: ${e.message}", e)
+            null
+        }
+    }
     
     // Edit dialog state
     var editBusinessName by remember(ad) { mutableStateOf(ad.businessName) }
@@ -2300,24 +2552,38 @@ private fun MyAdCard(
     var editImageUri by remember { mutableStateOf<Uri?>(null) }
     var editLogoUri by remember { mutableStateOf<Uri?>(null) }
     
-    // Image picker launchers
+    // Image picker launchers - copy to internal storage immediately for persistence
     val imageLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        editImageUri = uri
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                val localUri = copyImageToInternalStorage(uri, "edit_image")
+                withContext(Dispatchers.Main) {
+                    editImageUri = localUri ?: uri
+                }
+            }
+        }
     }
     
     val logoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        editLogoUri = uri
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                val localUri = copyImageToInternalStorage(uri, "edit_logo")
+                withContext(Dispatchers.Main) {
+                    editLogoUri = localUri ?: uri
+                }
+            }
+        }
     }
     
     // Edit dialog
     if (showEditDialog) {
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
-            title = { Text("Edit Advertisement") },
+            title = { Text(stringResource(R.string.edit_advertisement)) },
             text = {
                 Column(
                     modifier = Modifier
@@ -2326,7 +2592,7 @@ private fun MyAdCard(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // Image upload section
-                    Text("Images", fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.images), fontWeight = FontWeight.SemiBold)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -2345,21 +2611,21 @@ private fun MyAdCard(
                                             model = editImageUri,
                                             contentDescription = "New image",
                                             modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop
+                                            contentScale = ContentScale.Fit
                                         )
                                     } else if (!ad.imageUrl.isNullOrBlank()) {
                                         AsyncImage(
                                             model = if (ad.imageUrl.startsWith("/")) File(ad.imageUrl) else ad.imageUrl,
                                             contentDescription = "Current image",
                                             modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop
+                                            contentScale = ContentScale.Fit
                                         )
                                     } else {
                                         Icon(Icons.Default.Image, null, modifier = Modifier.size(32.dp))
                                     }
                                 }
                             }
-                            Text("Image", style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(R.string.image), style = MaterialTheme.typography.labelSmall)
                         }
                         
                         // Logo
@@ -2377,45 +2643,45 @@ private fun MyAdCard(
                                             model = editLogoUri,
                                             contentDescription = "New logo",
                                             modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop
+                                            contentScale = ContentScale.Fit
                                         )
                                     } else if (!ad.logoUrl.isNullOrBlank()) {
                                         AsyncImage(
                                             model = if (ad.logoUrl.startsWith("/")) File(ad.logoUrl) else ad.logoUrl,
                                             contentDescription = "Current logo",
                                             modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop
+                                            contentScale = ContentScale.Fit
                                         )
                                     } else {
                                         Text(ad.category.getIcon(), fontSize = 28.sp)
                                     }
                                 }
                             }
-                            Text("Logo", style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(R.string.logo), style = MaterialTheme.typography.labelSmall)
                         }
                     }
-                    Text("Tap to change", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                    Text(stringResource(R.string.tap_to_change), style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                     
                     Divider()
                     
                     OutlinedTextField(
                         value = editBusinessName,
                         onValueChange = { editBusinessName = it },
-                        label = { Text("Business Name") },
+                        label = { Text(stringResource(R.string.business_name)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = editTitle,
                         onValueChange = { editTitle = it },
-                        label = { Text("Ad Title") },
+                        label = { Text(stringResource(R.string.ad_title_label)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = editDescription,
                         onValueChange = { editDescription = it },
-                        label = { Text("Description") },
+                        label = { Text(stringResource(R.string.description)) },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
                         maxLines = 4
@@ -2423,28 +2689,28 @@ private fun MyAdCard(
                     OutlinedTextField(
                         value = editPhone,
                         onValueChange = { editPhone = it },
-                        label = { Text("Phone Number") },
+                        label = { Text(stringResource(R.string.phone_number)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = editEmail,
                         onValueChange = { editEmail = it },
-                        label = { Text("Email") },
+                        label = { Text(stringResource(R.string.email)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = editWebsite,
                         onValueChange = { editWebsite = it },
-                        label = { Text("Website URL") },
+                        label = { Text(stringResource(R.string.website_url)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = editYoutubeUrl,
                         onValueChange = { editYoutubeUrl = it },
-                        label = { Text("YouTube Video URL") },
+                        label = { Text(stringResource(R.string.youtube_video_url)) },
                         placeholder = { Text("https://youtube.com/watch?v=...") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -2454,18 +2720,18 @@ private fun MyAdCard(
                     )
                     if (ad.hasCoupon) {
                         Divider()
-                        Text("Coupon Details", fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.coupon_details), fontWeight = FontWeight.SemiBold)
                         OutlinedTextField(
                             value = editCouponDiscount,
                             onValueChange = { editCouponDiscount = it },
-                            label = { Text("Discount (e.g., 10% OFF)") },
+                            label = { Text(stringResource(R.string.discount_example)) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
                         OutlinedTextField(
                             value = editCouponDescription,
                             onValueChange = { editCouponDescription = it },
-                            label = { Text("Coupon Description") },
+                            label = { Text(stringResource(R.string.coupon_description)) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -2491,12 +2757,12 @@ private fun MyAdCard(
                         )
                     }
                 ) {
-                    Text("Save")
+                    Text(stringResource(R.string.save))
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = { showEditDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -2507,13 +2773,13 @@ private fun MyAdCard(
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
             icon = { Icon(Icons.Default.Delete, null, tint = Error) },
-            title = { Text("Delete Advertisement?") },
+            title = { Text(stringResource(R.string.delete_advertisement)) },
             text = {
                 Column {
-                    Text("Are you sure you want to delete \"${ad.title}\"?")
+                    Text(stringResource(R.string.delete_ad_confirm, ad.title))
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Your billing history will be preserved for your records.",
+                        stringResource(R.string.billing_preserved),
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
@@ -2527,12 +2793,12 @@ private fun MyAdCard(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Error)
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.delete))
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = { showDeleteConfirmation = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -2577,7 +2843,8 @@ private fun MyAdCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(120.dp),
-                    contentScale = ContentScale.Crop,
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.Center,
                     onError = { android.util.Log.e("MyAdCard", "Image load error for ${ad.title}: ${it.result.throwable}") }
                 )
             } else if (youtubeVideoId != null) {
@@ -2623,13 +2890,8 @@ private fun MyAdCard(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = ad.category.getIcon(),
-                            fontSize = 56.sp
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = ad.category.getDisplayName(),
-                            style = MaterialTheme.typography.titleMedium,
+                            text = ad.businessName.take(2).uppercase(),
+                            fontSize = 36.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
@@ -2649,7 +2911,7 @@ private fun MyAdCard(
                     Text("▶", color = Color(0xFFFF0000), style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "YouTube Video",
+                        text = stringResource(R.string.youtube_video),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(0xFFFF0000)
                     )
@@ -2713,13 +2975,13 @@ private fun MyAdCard(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Your ad is being viewed!",
+                                text = stringResource(R.string.ad_being_viewed_title),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Primary
                             )
                             Text(
-                                text = "${ad.impressions} drivers and riders have seen it",
+                                text = stringResource(R.string.ad_views_count, ad.impressions),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
@@ -2759,13 +3021,13 @@ private fun MyAdCard(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Draft - Payment Required",
+                                text = stringResource(R.string.draft_payment_required),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Warning
                             )
                             Text(
-                                text = "Pay to activate and make this ad live",
+                                text = stringResource(R.string.pay_to_activate),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
@@ -2786,10 +3048,9 @@ private fun MyAdCard(
                 ) {
                     Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Edit")
+                    Text(stringResource(R.string.edit))
                 }
                 
-                // Activate button for DRAFT ads
                 if (ad.status == AdStatus.DRAFT) {
                     Button(
                         onClick = onActivate,
@@ -2797,7 +3058,7 @@ private fun MyAdCard(
                     ) {
                         Icon(Icons.Default.Payment, null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Activate")
+                        Text(stringResource(R.string.activate))
                     }
                 } else if (ad.status == AdStatus.ACTIVE) {
                     OutlinedButton(
@@ -2805,7 +3066,7 @@ private fun MyAdCard(
                     ) {
                         Icon(Icons.Default.Pause, null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Pause")
+                        Text(stringResource(R.string.pause))
                     }
                 } else if (ad.status == AdStatus.PAUSED) {
                     Button(
@@ -2813,7 +3074,7 @@ private fun MyAdCard(
                     ) {
                         Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Resume")
+                        Text(stringResource(R.string.resume))
                     }
                 }
                 

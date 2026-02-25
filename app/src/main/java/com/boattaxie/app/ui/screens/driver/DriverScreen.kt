@@ -3,7 +3,14 @@ package com.boattaxie.app.ui.screens.driver
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.media.RingtoneManager
 import android.net.Uri
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -11,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -21,12 +29,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.boattaxie.app.R
 import com.boattaxie.app.data.model.*
 import com.boattaxie.app.ui.components.*
 import com.boattaxie.app.ui.theme.*
@@ -68,9 +80,113 @@ fun DriverHomeScreen(
         }
     }
     
+    // Track if we've shown the ride accepted notification
+    var notifiedRideAccepted by remember { mutableStateOf<String?>(null) }
+    
+    // Detect when rider accepts our fare proposal (activeRide becomes non-null)
+    // This also plays a notification sound and navigates to the ride
+    LaunchedEffect(uiState.activeRide?.id) {
+        uiState.activeRide?.let { ride ->
+            // Only notify if we haven't already for this ride
+            if (ride.id != notifiedRideAccepted && ride.status == BookingStatus.ACCEPTED) {
+                android.util.Log.d("DriverScreen", "Rider accepted! Ride ID: ${ride.id}")
+                notifiedRideAccepted = ride.id
+                
+                // Play success notification sound
+                try {
+                    val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                    val mediaPlayer = MediaPlayer().apply {
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                                .build()
+                        )
+                        setDataSource(context, notificationUri)
+                        prepare()
+                        start()
+                    }
+                    mediaPlayer.setOnCompletionListener { mp -> mp.release() }
+                    
+                    // Vibrate to alert driver
+                    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        val vibratorManager = context.getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                        vibratorManager.defaultVibrator
+                    } else {
+                        @Suppress("DEPRECATION")
+                        context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as Vibrator
+                    }
+                    
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("DriverScreen", "Error playing ride accepted notification: ${e.message}")
+                }
+                
+                // Navigate to active ride
+                onNavigateToActiveRide(ride.id)
+            }
+        }
+    }
+    
     // Refresh active ride when screen becomes visible (on tab switch)
     LaunchedEffect(Unit) {
         viewModel.refreshActiveRide()
+    }
+    
+    // Track previous request count to detect new requests
+    var previousRequestCount by remember { mutableStateOf(0) }
+    
+    // Play sound and vibrate when new ride request comes in
+    LaunchedEffect(uiState.allPendingRequests.size) {
+        val currentCount = uiState.allPendingRequests.size
+        // Only play sound if there are new requests (count increased) and driver is online
+        if (currentCount > previousRequestCount && currentCount > 0 && uiState.isOnline) {
+            try {
+                // Play notification sound
+                val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                val mediaPlayer = MediaPlayer().apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                            .build()
+                    )
+                    setDataSource(context, notificationUri)
+                    prepare()
+                    start()
+                }
+                
+                // Release after playing
+                mediaPlayer.setOnCompletionListener { mp ->
+                    mp.release()
+                }
+                
+                // Vibrate to alert driver
+                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val vibratorManager = context.getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                    vibratorManager.defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as Vibrator
+                }
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    // Vibrate pattern: wait 0ms, vibrate 500ms, wait 200ms, vibrate 500ms
+                    val pattern = longArrayOf(0, 500, 200, 500)
+                    vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(longArrayOf(0, 500, 200, 500), -1)
+                }
+                
+                android.util.Log.d("DriverScreen", "Playing ride request notification sound for ${currentCount - previousRequestCount} new requests")
+            } catch (e: Exception) {
+                android.util.Log.e("DriverScreen", "Error playing notification sound: ${e.message}")
+            }
+        }
+        previousRequestCount = currentCount
     }
     
     // State for summary popup
@@ -78,6 +194,27 @@ fun DriverHomeScreen(
     
     // State for vehicle type switch dialog
     var showVehicleSwitchDialog by remember { mutableStateOf(false) }
+    
+    // State for pending requests dropdown
+    var showPendingRequestsDropdown by remember { mutableStateOf(false) }
+    
+    // State for selected request to show on map (not as full popup)
+    var selectedRequestForMap by remember { mutableStateOf<Booking?>(null) }
+    
+    // Keep selectedRequestForMap in sync with allPendingRequests
+    // This updates the local state when Firebase data changes (e.g., after proposeFareChange)
+    LaunchedEffect(uiState.allPendingRequests) {
+        selectedRequestForMap?.let { selected ->
+            val updatedBooking = uiState.allPendingRequests.find { it.id == selected.id }
+            if (updatedBooking != null && updatedBooking != selected) {
+                android.util.Log.d("DriverScreen", "Updating selectedRequestForMap: driverAdjustedFare=${updatedBooking.driverAdjustedFare}")
+                selectedRequestForMap = updatedBooking
+            } else if (updatedBooking == null) {
+                // Booking was removed (e.g., cancelled or accepted)
+                selectedRequestForMap = null
+            }
+        }
+    }
     
     Scaffold(
         topBar = {
@@ -110,6 +247,9 @@ fun DriverHomeScreen(
                     }
                 },
                 actions = {
+                    // Live users badge
+                    LiveUsersBadge(compact = true, showDriverCount = true)
+                    
                     // Show vehicle switcher button if driver has both vehicles
                     if (uiState.hasBoat && uiState.hasTaxi) {
                         Surface(
@@ -193,31 +333,37 @@ fun DriverHomeScreen(
                 if (uiState.showRequestsOnMap) {
                     uiState.allPendingRequests.forEach { booking ->
                         val pickupLoc = LatLng(booking.pickupLocation.latitude, booking.pickupLocation.longitude)
+                        val dropoffLoc = LatLng(booking.destinationLocation.latitude, booking.destinationLocation.longitude)
+                        val isSelected = selectedRequestForMap?.id == booking.id
+                        
+                        // Pickup marker
                         MarkerComposable(
                             state = rememberMarkerState(position = pickupLoc),
                             onClick = {
-                                viewModel.selectRequest(booking)
+                                selectedRequestForMap = if (isSelected) null else booking
                                 true
                             }
                         ) {
-                            // Custom marker showing pickup address and fare
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Surface(
-                                    color = if (booking.vehicleType == VehicleType.BOAT) Primary else Warning,
+                                    color = if (isSelected) Success else (if (booking.vehicleType == VehicleType.BOAT) Primary else Warning),
                                     shape = RoundedCornerShape(8.dp),
-                                    shadowElevation = 4.dp
+                                    shadowElevation = if (isSelected) 8.dp else 4.dp
                                 ) {
                                     Column(
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        // Pickup short address or coordinates
+                                        Text(
+                                            text = "📍 PICKUP",
+                                            color = Color.White.copy(alpha = 0.9f),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                         val pickupText = if (booking.pickupAddress.isNotEmpty()) {
                                             booking.pickupAddress.take(15) + if (booking.pickupAddress.length > 15) "..." else ""
                                         } else {
-                                            "📍 ${String.format("%.3f", booking.pickupLocation.latitude)}"
+                                            String.format("%.4f, %.4f", booking.pickupLocation.latitude, booking.pickupLocation.longitude)
                                         }
                                         Text(
                                             text = pickupText,
@@ -225,179 +371,599 @@ fun DriverHomeScreen(
                                             style = MaterialTheme.typography.labelSmall,
                                             maxLines = 1
                                         )
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(
-                                                text = if (booking.vehicleType == VehicleType.BOAT) "🚤" else "🚕",
-                                                style = MaterialTheme.typography.labelMedium
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "$${String.format("%.2f", booking.estimatedFare)}",
+                                                text = if (booking.vehicleType == VehicleType.BOAT) "🚤 Boat" else "🚕 Taxi",
+                                                style = MaterialTheme.typography.labelMedium,
                                                 color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.labelMedium
+                                                fontWeight = FontWeight.Bold
                                             )
                                         }
                                     }
                                 }
                                 Icon(
-                                    Icons.Default.LocationOn,
+                                    Icons.Default.MyLocation,
                                     contentDescription = null,
-                                    tint = if (booking.vehicleType == VehicleType.BOAT) Primary else Warning,
+                                    tint = if (isSelected) Success else (if (booking.vehicleType == VehicleType.BOAT) Primary else Warning),
                                     modifier = Modifier.size(24.dp)
                                 )
+                            }
+                        }
+                        
+                        // Show dropoff marker when this request is selected
+                        if (isSelected) {
+                            MarkerComposable(
+                                state = rememberMarkerState(position = dropoffLoc),
+                                onClick = { true }
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Surface(
+                                        color = Error,
+                                        shape = RoundedCornerShape(8.dp),
+                                        shadowElevation = 8.dp
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Text(
+                                                text = "DROPOFF",
+                                                color = Color.White,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            val dropoffText = if (booking.destinationAddress.isNotEmpty()) {
+                                                booking.destinationAddress.take(15) + if (booking.destinationAddress.length > 15) "..." else ""
+                                            } else {
+                                                "📍 ${String.format("%.3f", booking.destinationLocation.latitude)}"
+                                            }
+                                            Text(
+                                                text = dropoffText,
+                                                color = Color.White,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                    Icon(
+                                        Icons.Default.Flag,
+                                        contentDescription = null,
+                                        tint = Error,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                            
+                            // Draw line between pickup and dropoff
+                            Polyline(
+                                points = listOf(pickupLoc, dropoffLoc),
+                                color = Primary,
+                                width = 8f
+                            )
+                        }
+                    }
+                }
+                
+                // ALWAYS show selected request markers even if showRequestsOnMap is false
+                if (!uiState.showRequestsOnMap) {
+                    selectedRequestForMap?.let { booking ->
+                        val pickupLoc = LatLng(booking.pickupLocation.latitude, booking.pickupLocation.longitude)
+                        val dropoffLoc = LatLng(booking.destinationLocation.latitude, booking.destinationLocation.longitude)
+                        
+                        // Pickup marker (green)
+                        MarkerComposable(
+                            state = rememberMarkerState(position = pickupLoc),
+                            onClick = { true }
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Surface(
+                                    color = Success,
+                                    shape = RoundedCornerShape(8.dp),
+                                    shadowElevation = 8.dp
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = "📍 PICKUP",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = booking.pickupAddress.take(20) + if (booking.pickupAddress.length > 20) "..." else "",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1
+                                        )
+                                        // No fare shown - driver will set their price
+                                    }
+                                }
+                                Icon(
+                                    Icons.Default.MyLocation,
+                                    contentDescription = null,
+                                    tint = Success,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        
+                        // Dropoff marker (red)
+                        MarkerComposable(
+                            state = rememberMarkerState(position = dropoffLoc),
+                            onClick = { true }
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Surface(
+                                    color = Error,
+                                    shape = RoundedCornerShape(8.dp),
+                                    shadowElevation = 8.dp
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = "🏁 DROPOFF",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = booking.destinationAddress.take(20) + if (booking.destinationAddress.length > 20) "..." else "",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    Icons.Default.Flag,
+                                    contentDescription = null,
+                                    tint = Error,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        
+                        // Route line
+                        Polyline(
+                            points = listOf(pickupLoc, dropoffLoc),
+                            color = Primary,
+                            width = 8f
+                        )
+                    }
+                }
+            }
+            
+            // Pending Ride Requests Dropdown at the top
+            if (uiState.allPendingRequests.isNotEmpty() && uiState.isOnline) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 70.dp, start = 16.dp, end = 16.dp)
+                        .fillMaxWidth()
+                ) {
+                    // Dropdown header button
+                    Surface(
+                        onClick = { showPendingRequestsDropdown = !showPendingRequestsDropdown },
+                        color = Primary,
+                        shape = RoundedCornerShape(12.dp),
+                        shadowElevation = 6.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Notifications,
+                                    "Requests",
+                                    tint = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(R.string.pending_ride_requests),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    color = Color.White,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = "${uiState.allPendingRequests.size}",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Primary,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(
+                                    if (showPendingRequestsDropdown) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    "Toggle",
+                                    tint = Color.White
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Dropdown list
+                    AnimatedVisibility(
+                        visible = showPendingRequestsDropdown,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Surface)
+                        ) {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 250.dp)
+                            ) {
+                                items(uiState.allPendingRequests, key = { it.id }) { booking ->
+                                    val isSelected = selectedRequestForMap?.id == booking.id
+                                    Surface(
+                                        onClick = {
+                                            selectedRequestForMap = if (isSelected) null else booking
+                                            showPendingRequestsDropdown = false
+                                            // Move camera to show the route
+                                            if (!isSelected) {
+                                                val pickupLoc = LatLng(booking.pickupLocation.latitude, booking.pickupLocation.longitude)
+                                                cameraPositionState.position = CameraPosition.fromLatLngZoom(pickupLoc, 13f)
+                                            }
+                                        },
+                                        color = if (isSelected) Primary.copy(alpha = 0.1f) else Color.Transparent
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            // Vehicle type icon
+                                            Surface(
+                                                color = if (booking.vehicleType == VehicleType.BOAT) Primary.copy(alpha = 0.2f) else Warning.copy(alpha = 0.2f),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (booking.vehicleType == VehicleType.BOAT) "🚤" else "🚕",
+                                                    modifier = Modifier.padding(8.dp),
+                                                    style = MaterialTheme.typography.titleLarge
+                                                )
+                                            }
+                                            
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            
+                                            // Details
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        text = if (booking.pickupAddress.isNotEmpty()) booking.pickupAddress.take(20) + if (booking.pickupAddress.length > 20) "..." else "" else "Location pickup",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.Medium,
+                                                        maxLines = 1,
+                                                        modifier = Modifier.weight(1f, fill = false)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Surface(
+                                                        color = Warning,
+                                                        shape = RoundedCornerShape(6.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = "👥 ${booking.passengerCount} people",
+                                                            style = MaterialTheme.typography.labelMedium,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color.White,
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                        )
+                                                    }
+                                                }
+                                                Text(
+                                                    text = "→ ${if (booking.destinationAddress.isNotEmpty()) booking.destinationAddress.take(20) + if (booking.destinationAddress.length > 20) "..." else "" else "Destination"}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = TextSecondary,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                            
+                                            // Status - no fare shown, driver sets price
+                                            Column(horizontalAlignment = Alignment.End) {
+                                                Text(
+                                                    text = if (booking.vehicleType == VehicleType.BOAT) "🚤" else "🚕",
+                                                    style = MaterialTheme.typography.titleMedium
+                                                )
+                                                if (booking.driverId != null) {
+                                                    Text(
+                                                        text = "🎯 Requested",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Success
+                                                    )
+                                                } else {
+                                                    Text(
+                                                        text = "Set price →",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Primary
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (booking != uiState.allPendingRequests.last()) {
+                                        Divider(color = Color.Gray.copy(alpha = 0.2f))
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
             
-            // Selected Request Popup - shows full details
-            uiState.selectedRequest?.let { booking ->
+            // Accept/Decline card at the bottom when a request is selected
+            // NEW FLOW: Driver sets their price and submits an offer
+            selectedRequestForMap?.let { booking ->
+                // Check if driver already submitted an offer for this booking
+                var myExistingOffer by remember { mutableStateOf<DriverOffer?>(null) }
+                var isCheckingOffer by remember { mutableStateOf(true) }
+                
+                LaunchedEffect(booking.id) {
+                    isCheckingOffer = true
+                    myExistingOffer = viewModel.getMyOffer(booking.id)
+                    isCheckingOffer = false
+                }
+                
+                var priceInputText by remember(booking.id) { 
+                    mutableStateOf("")  // Start empty - driver must enter their price
+                }
+                val enteredPrice = priceInputText.toDoubleOrNull()
+                val hasEnteredPrice = enteredPrice != null && enteredPrice > 0
+                
+                // Compact floating price input bar - lets driver see map
                 Card(
                     modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(24.dp)
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
                         .fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(12.dp),
                     elevation = CardDefaults.cardElevation(8.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        // Header with vehicle type
+                    if (isCheckingOffer) {
+                        // Loading
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = if (booking.vehicleType == VehicleType.BOAT) "🚤" else "🚕",
-                                    style = MaterialTheme.typography.headlineMedium
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Ride Request",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            IconButton(onClick = { viewModel.selectRequest(null) }) {
-                                Icon(Icons.Default.Close, "Close")
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        // Pickup
-                        Row(verticalAlignment = Alignment.Top) {
-                            Icon(
-                                Icons.Default.MyLocation,
-                                null,
-                                tint = Success,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = "PICKUP",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Success,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = if (booking.pickupAddress.isNotEmpty()) booking.pickupAddress 
-                                           else "📍 %.4f, %.4f".format(booking.pickupLocation.latitude, booking.pickupLocation.longitude),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                            Text("Checking...", style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else if (myExistingOffer != null) {
+                        // Already submitted - check if rejected or waiting
+                        if (myExistingOffer!!.isRejected) {
+                            // Offer was rejected - show message to lower price
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Close, null, tint = Color.Red, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Column {
+                                            Text(
+                                                text = stringResource(R.string.price_rejected, String.format("%.2f", myExistingOffer!!.price)),
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.Red
+                                            )
+                                            Text(
+                                                text = stringResource(R.string.too_high_submit_lower),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.Red.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                    IconButton(onClick = { 
+                                        // Clear existing offer so driver can submit new one
+                                        myExistingOffer = null 
+                                    }) {
+                                        Icon(Icons.Default.Refresh, "Submit new price", tint = Primary)
+                                    }
+                                }
+                            }
+                        } else {
+                            // Waiting for rider response
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.AccessTime, null, tint = Warning, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column {
+                                        Text(
+                                            text = "Offer: $${String.format("%.2f", myExistingOffer!!.price)}",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Primary
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.waiting_for_rider),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSecondary
+                                        )
+                                    }
+                                }
+                                IconButton(onClick = { selectedRequestForMap = null }) {
+                                    Icon(Icons.Default.Close, "Close", tint = TextSecondary)
+                                }
                             }
                         }
-                        
-                        // Line connector
-                        Box(
-                            modifier = Modifier
-                                .padding(start = 9.dp, top = 4.dp, bottom = 4.dp)
-                                .width(2.dp)
-                                .height(20.dp)
-                                .background(Color.Gray)
-                        )
-                        
-                        // Drop-off
-                        Row(verticalAlignment = Alignment.Top) {
-                            Icon(
-                                Icons.Default.LocationOn,
-                                null,
-                                tint = Error,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = "DROP-OFF",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Error,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = if (booking.destinationAddress.isNotEmpty()) booking.destinationAddress 
-                                           else "📍 %.4f, %.4f".format(booking.destinationLocation.latitude, booking.destinationLocation.longitude),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                    } else {
+                        // Compact price input row
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            // Top row: Rider info + Close button
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // Small rider photo
+                                    Surface(
+                                        modifier = Modifier.size(32.dp),
+                                        shape = RoundedCornerShape(50),
+                                        color = Primary.copy(alpha = 0.2f)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            if (booking.riderPhotoUrl != null) {
+                                                AsyncImage(
+                                                    model = booking.riderPhotoUrl,
+                                                    contentDescription = "Rider",
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentScale = ContentScale.Crop
+                                                )
+                                            } else {
+                                                Icon(Icons.Default.Person, null, tint = Primary, modifier = Modifier.size(18.dp))
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = booking.riderName ?: "Rider",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = if (booking.riderIsLocalResident) "🏠 Local" else "✈️ Visitor",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (booking.riderIsLocalResident) Success else Warning
+                                        )
+                                    }
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // Passenger count badge - prominent
+                                    Surface(
+                                        color = Warning,
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "👥",
+                                                style = MaterialTheme.typography.titleMedium
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "${booking.passengerCount} people",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    // Distance badge
+                                    Surface(
+                                        color = Primary.copy(alpha = 0.1f),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "${String.format("%.1f", booking.estimatedDistance)} mi",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Primary,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { selectedRequestForMap = null },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, "Close", modifier = Modifier.size(18.dp))
+                                    }
+                                }
                             }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        // Fare and distance
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "$${String.format("%.2f", booking.estimatedFare)}",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Primary
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // Bottom row: Price input + Submit button
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Compact price input
+                                OutlinedTextField(
+                                    value = priceInputText,
+                                    onValueChange = { newValue ->
+                                        if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
+                                            priceInputText = newValue
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f).height(52.dp),
+                                    prefix = { Text("$", fontWeight = FontWeight.Bold) },
+                                    placeholder = { Text("Price", color = TextSecondary) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    textStyle = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                 )
-                                Text(
-                                    text = "Fare",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextSecondary
-                                )
+                                
+                                // Submit button
+                                Button(
+                                    onClick = { 
+                                        enteredPrice?.let { price ->
+                                            viewModel.submitPriceOffer(booking.id, price)
+                                            myExistingOffer = DriverOffer(
+                                                price = price,
+                                                driverId = "",
+                                                driverName = ""
+                                            )
+                                        }
+                                    },
+                                    enabled = hasEnteredPrice,
+                                    modifier = Modifier.height(52.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.Send, null, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Send", fontWeight = FontWeight.Bold)
+                                }
                             }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "${String.format("%.1f", booking.estimatedDistance)} mi",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "Distance",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextSecondary
-                                )
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        // Accept button
-                        Button(
-                            onClick = { viewModel.acceptSelectedRequest() },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Success)
-                        ) {
-                            Icon(Icons.Default.Check, null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Accept This Ride", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
+            
+            // Dock markers
             
             // Online/Offline toggle - prominent button at top center
             Surface(
@@ -427,65 +993,11 @@ fun DriverHomeScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        if (uiState.isOnline) "GO OFFLINE" else "GO ONLINE",
+                        text = if (uiState.isOnline) stringResource(R.string.go_offline) else stringResource(R.string.go_online),
                         fontWeight = FontWeight.Bold,
                         color = if (uiState.isOnline) TextOnPrimary else TextPrimary,
                         style = MaterialTheme.typography.titleMedium
                     )
-                }
-            }
-            
-            // Live Ride Requests Button - shows count and toggles map markers
-            if (uiState.isOnline) {
-                val totalRequests = uiState.boatRequestCount + uiState.taxiRequestCount
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = if (uiState.showRequestsOnMap) Primary else Surface,
-                    shadowElevation = 6.dp,
-                    onClick = { viewModel.toggleShowRequestsOnMap() },
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 85.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Pulsing indicator when there are requests
-                        if (totalRequests > 0) {
-                            Surface(
-                                modifier = Modifier.size(10.dp),
-                                shape = RoundedCornerShape(50),
-                                color = if (uiState.showRequestsOnMap) Color.White else Error
-                            ) {}
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                        Text(
-                            text = "$totalRequests Ride Requests",
-                            fontWeight = FontWeight.Bold,
-                            color = if (uiState.showRequestsOnMap) TextOnPrimary else TextPrimary
-                        )
-                        if (totalRequests > 0) {
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "🚤${uiState.boatRequestCount} 🚕${uiState.taxiRequestCount}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (uiState.showRequestsOnMap) TextOnPrimary.copy(alpha = 0.9f) else TextSecondary
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            IconButton(
-                                onClick = { viewModel.clearOldPendingBookings() },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Clear old requests",
-                                    tint = if (uiState.showRequestsOnMap) TextOnPrimary else Error,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
                 }
             }
             
@@ -595,16 +1107,6 @@ fun DriverHomeScreen(
                     }
                 }
             }
-            
-            // New ride request popup
-            uiState.pendingRequest?.let { booking ->
-                RideRequestPopup(
-                    booking = booking,
-                    onAccept = { viewModel.acceptBooking(booking.id) },
-                    onDecline = { viewModel.declineBooking(booking.id) },
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
         }
         
         // Vehicle switch dialog
@@ -680,7 +1182,7 @@ fun DriverHomeScreen(
                         if (uiState.isOnline) {
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                "⚠️ You'll go offline when switching vehicles",
+                                stringResource(R.string.go_offline_warning),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Warning
                             )
@@ -716,201 +1218,6 @@ private fun StatBox(
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary
         )
-    }
-}
-
-@Composable
-private fun RideRequestPopup(
-    booking: Booking,
-    onAccept: () -> Unit,
-    onDecline: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Surface),
-        elevation = CardDefaults.cardElevation(8.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (booking.driverId != null) "🎯 You've been requested!" else "New Ride Request!",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Surface(
-                    color = Primary,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = "$${String.format("%.2f", booking.estimatedFare)}",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextOnPrimary
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            // Rider info - show photo and name
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // Rider photo
-                Surface(
-                    modifier = Modifier.size(50.dp),
-                    shape = RoundedCornerShape(50),
-                    color = Primary.copy(alpha = 0.1f)
-                ) {
-                    if (booking.riderPhotoUrl != null) {
-                        AsyncImage(
-                            model = booking.riderPhotoUrl,
-                            contentDescription = "Rider photo",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                            Icon(
-                                Icons.Default.Person,
-                                null,
-                                tint = Primary,
-                                modifier = Modifier.size(30.dp)
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = booking.riderName ?: "Rider",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (booking.driverId != null) {
-                        Text(
-                            text = "Requested you specifically!",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Primary,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Pickup
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.MyLocation,
-                    null,
-                    tint = Success,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = "Pickup",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary
-                    )
-                    Text(
-                        text = booking.pickupLocation.address ?: "Location",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // Dropoff
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.LocationOn,
-                    null,
-                    tint = Error,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = "Drop-off",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary
-                    )
-                    Text(
-                        text = booking.destinationLocation.address ?: "Destination",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            // Trip details
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "${String.format("%.1f", booking.estimatedDistance)} mi",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "Distance",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "${booking.estimatedDuration} min",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "Duration",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Actions
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onDecline,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Error)
-                ) {
-                    Text("Decline")
-                }
-                Button(
-                    onClick = onAccept,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Accept")
-                }
-            }
-        }
     }
 }
 
@@ -1326,7 +1633,7 @@ fun ActiveRideScreen(
                             Text(
                                 text = when (booking.status) {
                                     BookingStatus.ACCEPTED -> "Navigate to Pickup"
-                                    BookingStatus.ARRIVED -> "Waiting for Passenger"
+                                    BookingStatus.ARRIVED -> stringResource(R.string.waiting_for_passenger)
                                     BookingStatus.IN_PROGRESS -> "Navigate to Drop-off"
                                     else -> "Ride"
                                 },
@@ -1351,13 +1658,13 @@ fun ActiveRideScreen(
                                 maxLines = 1
                             )
                         }
-                        // Fare badge
+                        // Fare badge - show accepted price (the driver's offer that was accepted)
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.2f)
                         ) {
                             Text(
-                                text = "$${String.format("%.2f", booking.driverAdjustedFare ?: booking.estimatedFare)}",
+                                text = "$${String.format("%.2f", booking.acceptedPrice ?: booking.driverAdjustedFare ?: booking.estimatedFare)}",
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
@@ -1425,7 +1732,7 @@ fun ActiveRideScreen(
                         // Connect to passenger section
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Connect to your passenger",
+                            text = stringResource(R.string.connect_to_passenger),
                             style = MaterialTheme.typography.labelMedium,
                             color = TextSecondary,
                             modifier = Modifier.padding(start = 4.dp)
@@ -1516,32 +1823,26 @@ fun ActiveRideScreen(
                         // Action button
                         when (booking.status) {
                             BookingStatus.ACCEPTED -> {
-                                Row(modifier = Modifier.fillMaxWidth()) {
-                                    TextButton(
-                                        onClick = { viewModel.cancelRide(bookingId); onNavigateBack() },
-                                        modifier = Modifier.weight(0.3f)
-                                    ) { Text("Cancel", color = Error) }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Button(
-                                        onClick = { viewModel.arrivedAtPickup(bookingId) },
-                                        modifier = Modifier.weight(0.7f),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Success)
-                                    ) { Text("Arrived at Pickup") }
-                                }
+                                // Only riders can cancel bookings - drivers just proceed with the ride
+                                Button(
+                                    onClick = { viewModel.arrivedAtPickup(bookingId) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Success)
+                                ) { Text(stringResource(R.string.arrived_at_pickup)) }
                             }
                             BookingStatus.ARRIVED -> {
                                 Button(
                                     onClick = { viewModel.startRide(bookingId) },
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(containerColor = Primary)
-                                ) { Text("Start Ride") }
+                                ) { Text(stringResource(R.string.start_ride)) }
                             }
                             BookingStatus.IN_PROGRESS -> {
                                 Button(
                                     onClick = { viewModel.completeRide(bookingId); onRideComplete() },
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(containerColor = Success)
-                                ) { Text("Complete Ride") }
+                                ) { Text(stringResource(R.string.complete_ride)) }
                             }
                             BookingStatus.COMPLETED -> {
                                 // Ride is done - show clear button

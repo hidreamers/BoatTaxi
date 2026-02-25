@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -26,7 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.boattaxie.app.R
 import com.boattaxie.app.data.model.*
+import com.boattaxie.app.data.repository.AuthRepository
 import com.boattaxie.app.data.repository.SubscriptionRepository
 import com.boattaxie.app.ui.components.*
 import com.boattaxie.app.ui.theme.*
@@ -37,14 +40,15 @@ fun subscriptionViewModel(): SubscriptionViewModel {
     val context = LocalContext.current
     return viewModel(factory = object : androidx.lifecycle.ViewModelProvider.Factory {
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-            // For now, create a simple mock repository
-            // In a real app, you'd inject this properly
+            val firestore = FirebaseFirestore.getInstance()
+            val firebaseAuth = FirebaseAuth.getInstance()
             val repository = SubscriptionRepository(
-                FirebaseAuth.getInstance(),
-                FirebaseFirestore.getInstance()
+                firebaseAuth,
+                firestore
             )
+            val authRepository = AuthRepository(firebaseAuth, firestore)
             val application = context.applicationContext as android.app.Application
-            return SubscriptionViewModel(repository, application) as T
+            return SubscriptionViewModel(repository, authRepository, application) as T
         }
     })
 }
@@ -60,10 +64,10 @@ fun SubscriptionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Subscription") },
+                title = { Text(stringResource(R.string.subscription)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
+                        Icon(Icons.Default.ArrowBack, stringResource(R.string.back))
                     }
                 }
             )
@@ -82,10 +86,144 @@ fun SubscriptionScreen(
                     onRenew = onNavigateToPlans,
                     onCancel = { viewModel.cancelSubscription() }
                 )
+            } else if (uiState.hasFreeBookings && uiState.userPromoCode != null) {
+                // User has free bookings from promo code
+                PromoActiveView(
+                    promoCode = uiState.userPromoCode!!
+                )
             } else {
-                NoSubscriptionView(onSubscribe = onNavigateToPlans)
+                NoSubscriptionView(
+                    onSubscribe = onNavigateToPlans
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun PromoActiveView(
+    promoCode: String
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // Large success badge
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Success),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp),
+                    tint = Color.White
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(
+                    text = "🎉 " + stringResource(R.string.free_subscription_active),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    color = Color.White
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Text(
+                    text = stringResource(R.string.lifetime_access),
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    color = Color.White.copy(alpha = 0.9f)
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // Promo code badge
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Primary.copy(alpha = 0.1f)),
+            border = BorderStroke(2.dp, Primary)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.LocalOffer,
+                    contentDescription = null,
+                    tint = Primary,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = stringResource(R.string.promo_code_applied),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Text(
+                        text = promoCode,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Primary
+                    )
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // Benefits card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    text = stringResource(R.string.your_benefits),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                BenefitItem(stringResource(R.string.benefit_free_rides_forever))
+                Spacer(modifier = Modifier.height(8.dp))
+                BenefitItem(stringResource(R.string.benefit_unlimited_boats))
+                Spacer(modifier = Modifier.height(8.dp))
+                BenefitItem(stringResource(R.string.benefit_unlimited_taxis))
+                Spacer(modifier = Modifier.height(8.dp))
+                BenefitItem(stringResource(R.string.benefit_no_payment_needed))
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        Text(
+            text = stringResource(R.string.enjoy_free_rides),
+            style = MaterialTheme.typography.bodyLarge,
+            color = TextSecondary,
+            textAlign = TextAlign.Center
+        )
+        
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
@@ -96,6 +234,12 @@ private fun ActiveSubscriptionView(
     onCancel: () -> Unit
 ) {
     val remainingDays = SubscriptionHelper.getRemainingDays(subscription)
+    
+    // Format expiration date
+    val expirationDate = remember(subscription.endDate) {
+        val sdf = java.text.SimpleDateFormat("MMM dd, yyyy 'at' h:mm a", java.util.Locale.getDefault())
+        sdf.format(subscription.endDate.toDate())
+    }
     
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
@@ -110,7 +254,7 @@ private fun ActiveSubscriptionView(
         Spacer(modifier = Modifier.height(16.dp))
         
         Text(
-            text = "Subscription Active",
+            text = stringResource(R.string.subscription_active_title),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold
         )
@@ -131,13 +275,44 @@ private fun ActiveSubscriptionView(
             colors = CardDefaults.cardColors(containerColor = Surface)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
+                // Expiration date - prominent display
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Schedule,
+                        contentDescription = null,
+                        tint = if (remainingDays <= 3) Warning else Primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Expires",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                        Text(
+                            text = expirationDate,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (remainingDays <= 3) Warning else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(16.dp))
+                
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column {
                         Text(
-                            text = "Days Remaining",
+                            text = stringResource(R.string.days_remaining_label),
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary
                         )
@@ -150,7 +325,7 @@ private fun ActiveSubscriptionView(
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            text = "Price Paid",
+                            text = stringResource(R.string.price_paid),
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary
                         )
@@ -184,15 +359,15 @@ private fun ActiveSubscriptionView(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Your Benefits",
+                    text = stringResource(R.string.your_benefits),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                BenefitItem("Unlimited boat bookings")
-                BenefitItem("Unlimited taxi bookings")
-                BenefitItem("Priority support")
-                BenefitItem("No booking fees")
+                BenefitItem(stringResource(R.string.unlimited_boat_bookings))
+                BenefitItem(stringResource(R.string.unlimited_taxi_bookings))
+                BenefitItem(stringResource(R.string.priority_support))
+                BenefitItem(stringResource(R.string.no_booking_fees))
             }
         }
         
@@ -201,37 +376,41 @@ private fun ActiveSubscriptionView(
         // Actions
         if (remainingDays <= 7) {
             PrimaryButton(
-                text = "Renew Subscription",
+                text = stringResource(R.string.renew_subscription_btn),
                 onClick = onRenew
             )
             Spacer(modifier = Modifier.height(12.dp))
         }
         
         TextButton(onClick = onCancel) {
-            Text("Cancel Subscription", color = Error)
+            Text(stringResource(R.string.cancel_subscription), color = Error)
         }
     }
 }
 
 @Composable
-private fun NoSubscriptionView(onSubscribe: () -> Unit) {
+private fun NoSubscriptionView(
+    onSubscribe: () -> Unit
+) {
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         
         Icon(
             Icons.Default.CardMembership,
-            "Subscribe",
-            modifier = Modifier.size(100.dp),
+            stringResource(R.string.subscribe),
+            modifier = Modifier.size(80.dp),
             tint = Primary
         )
         
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         
         Text(
-            text = "Unlock Unlimited Rides",
+            text = stringResource(R.string.unlock_unlimited_rides),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
@@ -240,13 +419,13 @@ private fun NoSubscriptionView(onSubscribe: () -> Unit) {
         Spacer(modifier = Modifier.height(8.dp))
         
         Text(
-            text = "Subscribe to book boats and taxis anytime",
+            text = stringResource(R.string.subscribe_anytime),
             style = MaterialTheme.typography.bodyLarge,
             color = TextSecondary,
             textAlign = TextAlign.Center
         )
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         
         // Pricing highlight
         Card(
@@ -258,7 +437,7 @@ private fun NoSubscriptionView(onSubscribe: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Starting at",
+                    text = stringResource(R.string.starting_at),
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary
                 )
@@ -266,13 +445,13 @@ private fun NoSubscriptionView(onSubscribe: () -> Unit) {
                     verticalAlignment = Alignment.Bottom
                 ) {
                     Text(
-                        text = "$2.99",
+                        text = "$1.99",
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
                         color = Primary
                     )
                     Text(
-                        text = "/day",
+                        text = stringResource(R.string.per_day),
                         style = MaterialTheme.typography.titleMedium,
                         color = TextSecondary,
                         modifier = Modifier.padding(bottom = 4.dp)
@@ -287,23 +466,23 @@ private fun NoSubscriptionView(onSubscribe: () -> Unit) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "What You Get",
+                    text = stringResource(R.string.what_you_get),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                BenefitItem("Unlimited boat bookings")
-                BenefitItem("Unlimited taxi bookings")
-                BenefitItem("Flexible plans (1 day to 1 month)")
-                BenefitItem("Save up to 45% with longer plans")
-                BenefitItem("Cancel anytime")
+                BenefitItem(stringResource(R.string.benefit_unlimited_boats))
+                BenefitItem(stringResource(R.string.benefit_unlimited_taxis))
+                BenefitItem(stringResource(R.string.benefit_flexible_plans))
+                BenefitItem(stringResource(R.string.benefit_save_percent))
+                BenefitItem(stringResource(R.string.benefit_cancel_anytime))
             }
         }
         
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(32.dp))
         
         PrimaryButton(
-            text = "View Plans",
+            text = stringResource(R.string.view_plans),
             onClick = onSubscribe
         )
         
@@ -343,92 +522,95 @@ fun SubscriptionPlansScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Choose Your Plan") },
+                title = { Text(stringResource(R.string.choose_your_plan)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
+                        Icon(Icons.Default.ArrowBack, stringResource(R.string.back))
                     }
                 }
             )
+        },
+        // Fixed bottom bar for continue button - always visible
+        bottomBar = {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shadowElevation = 8.dp,
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                ) {
+                    PrimaryButton(
+                        text = if (uiState.selectedPlan != null) 
+                            stringResource(R.string.continue_price, String.format("%.2f", uiState.selectedPlan!!.price))
+                        else 
+                            stringResource(R.string.select_a_plan),
+                        onClick = {
+                            uiState.selectedPlan?.let { plan ->
+                                onNavigateToPayment(plan.name)
+                            }
+                        },
+                        enabled = uiState.selectedPlan != null
+                    )
+                }
+            }
         }
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                // Header with benefits
-                Surface(
-                    color = Primary.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
+                // Compact header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Column {
+                        Text(
+                            text = stringResource(R.string.unlimited_rides),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = stringResource(R.string.taxi_boat_cancel),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+                    Surface(
+                        color = Success.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "🚤",
-                            fontSize = 48.sp
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Unlimited Rides in Bocas del Toro",
-                            style = MaterialTheme.typography.titleMedium,
+                            text = stringResource(R.string.save_up_to),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Success,
                             fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        // Benefits grid
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("🚕", fontSize = 24.sp)
-                                Text("Taxi", style = MaterialTheme.typography.labelSmall)
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("🚤", fontSize = 24.sp)
-                                Text("Boat", style = MaterialTheme.typography.labelSmall)
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("📍", fontSize = 24.sp)
-                                Text("Tracking", style = MaterialTheme.typography.labelSmall)
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("⭐", fontSize = 24.sp)
-                                Text("Support", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 
                 Text(
-                    text = "Select a plan that works for you",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextSecondary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // Pricing info
-                Text(
-                    text = "💡 Longer plans = bigger savings!",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Success,
+                    text = stringResource(R.string.select_your_plan),
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
             }
             
+            // Show ALL plans directly - always visible
             items(SubscriptionPlan.values().toList()) { plan ->
                 SubscriptionPlanCard(
                     plan = plan,
@@ -438,82 +620,23 @@ fun SubscriptionPlansScreen(
             }
             
             item {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 
-                // Full pricing breakdown
+                // Compact benefits list
                 Surface(
                     color = Surface,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            text = "📊 Full Pricing Breakdown",
-                            style = MaterialTheme.typography.titleSmall,
+                            text = stringResource(R.string.all_plans_include),
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        // Price table
-                        SubscriptionPlan.values().forEach { plan ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = plan.displayName,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Row {
-                                    if (plan.getSavingsPercentage() > 0) {
-                                        Text(
-                                            text = "$${String.format("%.2f", plan.originalPrice)}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = TextSecondary,
-                                            textDecoration = TextDecoration.LineThrough
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                    }
-                                    Text(
-                                        text = "$${String.format("%.2f", plan.price)}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (plan.getSavingsPercentage() > 0) Success else TextPrimary
-                                    )
-                                    if (plan.getSavingsPercentage() > 0) {
-                                        Text(
-                                            text = " (-${plan.getSavingsPercentage()}%)",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Success
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Divider()
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "✅ All plans include unlimited taxi & boat rides",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
-                        Text(
-                            text = "✅ Real-time driver/captain tracking",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
-                        Text(
-                            text = "✅ Priority customer support",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
-                        Text(
-                            text = "✅ No hidden fees",
+                            text = stringResource(R.string.plans_benefits),
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -521,18 +644,6 @@ fun SubscriptionPlansScreen(
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
-                
-                PrimaryButton(
-                    text = "Continue to Payment",
-                    onClick = {
-                        uiState.selectedPlan?.let { plan ->
-                            onNavigateToPayment(plan.name)
-                        }
-                    },
-                    enabled = uiState.selectedPlan != null
-                )
-                
-                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }
@@ -553,7 +664,7 @@ fun PaymentScreen(
     val context = LocalContext.current
     val activity = context as? ComponentActivity
 
-    // Stripe is now initialized in ViewModel init block
+    // Google Play Billing is initialized in ViewModel init block
     
     LaunchedEffect(uiState.paymentSuccess) {
         if (uiState.paymentSuccess) {
@@ -564,10 +675,10 @@ fun PaymentScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Complete Your Subscription") },
+                title = { Text(stringResource(R.string.complete_subscription)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
+                        Icon(Icons.Default.ArrowBack, stringResource(R.string.back))
                     }
                 }
             )
@@ -593,7 +704,7 @@ fun PaymentScreen(
                         Text("🎉", fontSize = 24.sp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Order Summary",
+                            text = stringResource(R.string.order_summary),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -657,7 +768,7 @@ fun PaymentScreen(
             
             // What you get
             Text(
-                text = "✅ What's Included",
+                text = stringResource(R.string.whats_included),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -682,7 +793,7 @@ fun PaymentScreen(
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Stripe payment option
+            // Google Play payment option
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Primary.copy(alpha = 0.1f)),
@@ -692,17 +803,17 @@ fun PaymentScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("💳", fontSize = 28.sp)
+                    Text("🛒", fontSize = 28.sp)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Credit Card",
+                            text = "Google Play",
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Bold,
                             color = Primary
                         )
                         Text(
-                            text = "Fast & secure payment via Stripe",
+                            text = "Fast & secure payment via Google Play",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -745,7 +856,7 @@ fun PaymentScreen(
             Button(
                 onClick = { 
                     activity?.let { 
-                        viewModel.startStripePayment(it, plan)
+                        viewModel.startGooglePlayPayment(it, plan)
                     }
                 },
                 modifier = Modifier
@@ -763,10 +874,10 @@ fun PaymentScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Processing Payment...")
                 } else {
-                    Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.ShoppingCart, null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Pay with Stripe $${String.format("%.2f", plan.price)}",
+                        text = "Pay with Google Play $${String.format("%.2f", plan.price)}",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -784,7 +895,7 @@ fun PaymentScreen(
                 Text("🔒", fontSize = 14.sp)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "Secure payment powered by Stripe",
+                    text = "Secure payment powered by Google Play",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )

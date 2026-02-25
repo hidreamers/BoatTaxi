@@ -9,10 +9,14 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -33,15 +37,23 @@ class AdvertisementRepository @Inject constructor(
     private suspend fun uploadImageToStorage(imageUri: Uri, path: String): String? {
         return try {
             android.util.Log.d("AdRepo", "Uploading image to Firebase Storage: $path")
+            android.util.Log.d("AdRepo", "Image URI: $imageUri")
             val storageRef = storage.reference.child(path)
             
-            // Upload the file
-            storageRef.putFile(imageUri).await()
+            // Upload with 30 second timeout
+            android.util.Log.d("AdRepo", "Starting putFile...")
+            val result = withTimeoutOrNull(30_000L) {
+                val uploadTask = storageRef.putFile(imageUri).await()
+                android.util.Log.d("AdRepo", "putFile completed, getting download URL...")
+                storageRef.downloadUrl.await().toString()
+            }
             
-            // Get the download URL
-            val downloadUrl = storageRef.downloadUrl.await().toString()
-            android.util.Log.d("AdRepo", "Image uploaded successfully: $downloadUrl")
-            downloadUrl
+            if (result != null) {
+                android.util.Log.d("AdRepo", "Image uploaded successfully: $result")
+            } else {
+                android.util.Log.e("AdRepo", "Image upload timed out after 30 seconds")
+            }
+            result
         } catch (e: Exception) {
             android.util.Log.e("AdRepo", "Failed to upload image to Firebase Storage: ${e.message}", e)
             null
@@ -58,6 +70,7 @@ class AdvertisementRepository @Inject constructor(
         imageUri: Uri?,
         logoUri: Uri? = null,
         youtubeUrl: String? = null,
+        videoUrl: String? = null, // Direct MP4/video URL
         websiteUrl: String?,
         phoneNumber: String?,
         email: String?,
@@ -116,6 +129,7 @@ class AdvertisementRepository @Inject constructor(
                 imageUrl = imageUrl,
                 logoUrl = logoUrl,
                 youtubeUrl = youtubeUrl,
+                videoUrl = videoUrl,
                 websiteUrl = websiteUrl,
                 phoneNumber = phoneNumber,
                 email = email,
@@ -148,6 +162,7 @@ class AdvertisementRepository @Inject constructor(
                 "imageUrl" to ad.imageUrl,
                 "logoUrl" to ad.logoUrl,
                 "youtubeUrl" to ad.youtubeUrl,
+                "videoUrl" to ad.videoUrl,
                 "websiteUrl" to ad.websiteUrl,
                 "phoneNumber" to ad.phoneNumber,
                 "email" to ad.email,
@@ -233,13 +248,13 @@ class AdvertisementRepository @Inject constructor(
         val startDate = Timestamp.now()
         val endDate = AdHelper.calculateAdEndDate(ad.plan)
         
-        // Save status as STRING to match how we query it
+        // Save status as lowercase to match @PropertyName annotations
         firestore.collection("advertisements")
             .document(adId)
             .update(
                 mapOf(
-                    "status" to AdStatus.ACTIVE.name,
-                    "paymentStatus" to PaymentStatus.COMPLETED.name,
+                    "status" to "ACTIVE",
+                    "paymentStatus" to "COMPLETED",
                     "startDate" to startDate,
                     "endDate" to endDate,
                     "updatedAt" to Timestamp.now()
@@ -288,9 +303,21 @@ class AdvertisementRepository @Inject constructor(
             var results = allAds.filter { it.status == AdStatus.ACTIVE }
             android.util.Log.d("AdRepo", "Found ${results.size} ACTIVE ads after enum filter")
             
-            // Temporarily skip date filter for debugging
-            // results = results.filter { AdHelper.isAdActive(it) }
-            android.util.Log.d("AdRepo", "After date filter: ${results.size} ads")
+            // Filter by date - expire any ads that have passed their end date
+            val (activeAds, expiredAds) = results.partition { AdHelper.isAdActive(it) }
+            results = activeAds
+            android.util.Log.d("AdRepo", "After date filter: ${results.size} ads, ${expiredAds.size} expired")
+            
+            // Expire ads that have passed their end date
+            for (expiredAd in expiredAds) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        expireAd(expiredAd.id)
+                    } catch (e: Exception) {
+                        android.util.Log.e("AdRepo", "Failed to expire ad ${expiredAd.id}: ${e.message}")
+                    }
+                }
+            }
             
             // Filter by target audience if specified
             if (targetAudience != null && targetAudience != AdTargetAudience.ALL) {
@@ -315,9 +342,8 @@ class AdvertisementRepository @Inject constructor(
     }
     
     /**
-     * Get featured advertisements (falls back to all active ads if no featured ones)
+     * Get featured advertisements (prioritizes isFeatured=true, then fills with active ads)
      * Excludes test/seed ads (those with empty IDs)
-     * Fetches up to 100 ads and randomly selects from them
      */
     suspend fun getFeaturedAdvertisements(limit: Int = 20): List<Advertisement> {
         android.util.Log.d("AdRepo", "getFeaturedAdvertisements called")
@@ -335,11 +361,17 @@ class AdvertisementRepository @Inject constructor(
         
         android.util.Log.d("AdRepo", "Found ${allAds.size} real ads (excluding test ads)")
         
-        // Shuffle randomly and take the limit
-        val randomAds = allAds.shuffled().take(limit)
+        // Prioritize featured ads first, then fill with non-featured
+        val featuredAds = allAds.filter { it.isFeatured }
+        val nonFeaturedAds = allAds.filter { !it.isFeatured }
         
-        android.util.Log.d("AdRepo", "Returning ${randomAds.size} randomly selected ads for home screen")
-        return randomAds
+        android.util.Log.d("AdRepo", "Featured: ${featuredAds.size}, Non-featured: ${nonFeaturedAds.size}")
+        
+        // Combine: featured first (shuffled), then non-featured (shuffled)
+        val result = (featuredAds.shuffled() + nonFeaturedAds.shuffled()).take(limit)
+        
+        android.util.Log.d("AdRepo", "Returning ${result.size} ads for home screen (featured first)")
+        return result
     }
     
     /**
@@ -484,7 +516,7 @@ class AdvertisementRepository @Inject constructor(
         
         val allAds = mutableListOf<Advertisement>()
         
-        // Query 1: 'ads' collection (Stripe-paid ads from backend) with 'userId' field
+        // Query 1: 'ads' collection (Google Play paid ads) with 'userId' field
         try {
             val adsSnapshot = firestore.collection("ads")
                 .whereEqualTo("userId", uid)
@@ -504,6 +536,7 @@ class AdvertisementRepository @Inject constructor(
                         imageUrl = data["imageUri"] as? String,
                         logoUrl = data["logoUri"] as? String,
                         youtubeUrl = data["youtubeUrl"] as? String,
+                        videoUrl = data["videoUrl"] as? String,
                         websiteUrl = data["website"] as? String,
                         phoneNumber = data["phone"] as? String,
                         email = data["email"] as? String,
@@ -548,30 +581,60 @@ class AdvertisementRepository @Inject constructor(
     }
     
     /**
-     * Record ad impression
+     * Record ad impression - checks both 'advertisements' and 'ads' collections
      */
     suspend fun recordImpression(adId: String) {
         try {
-            firestore.collection("advertisements")
-                .document(adId)
-                .update("impressions", com.google.firebase.firestore.FieldValue.increment(1))
-                .await()
+            // Try 'advertisements' collection first
+            val adDoc = firestore.collection("advertisements").document(adId).get().await()
+            if (adDoc.exists()) {
+                firestore.collection("advertisements")
+                    .document(adId)
+                    .update("impressions", com.google.firebase.firestore.FieldValue.increment(1))
+                    .await()
+                android.util.Log.d("AdRepo", "Recorded impression for ad $adId in 'advertisements'")
+            } else {
+                // Try 'ads' collection
+                val adsDoc = firestore.collection("ads").document(adId).get().await()
+                if (adsDoc.exists()) {
+                    firestore.collection("ads")
+                        .document(adId)
+                        .update("impressions", com.google.firebase.firestore.FieldValue.increment(1))
+                        .await()
+                    android.util.Log.d("AdRepo", "Recorded impression for ad $adId in 'ads'")
+                }
+            }
         } catch (e: Exception) {
-            // Silently fail for impressions
+            android.util.Log.w("AdRepo", "Failed to record impression for $adId: ${e.message}")
         }
     }
     
     /**
-     * Record ad click
+     * Record ad click - checks both 'advertisements' and 'ads' collections
      */
     suspend fun recordClick(adId: String) {
         try {
-            firestore.collection("advertisements")
-                .document(adId)
-                .update("clicks", com.google.firebase.firestore.FieldValue.increment(1))
-                .await()
+            // Try 'advertisements' collection first
+            val adDoc = firestore.collection("advertisements").document(adId).get().await()
+            if (adDoc.exists()) {
+                firestore.collection("advertisements")
+                    .document(adId)
+                    .update("clicks", com.google.firebase.firestore.FieldValue.increment(1))
+                    .await()
+                android.util.Log.d("AdRepo", "Recorded click for ad $adId in 'advertisements'")
+            } else {
+                // Try 'ads' collection
+                val adsDoc = firestore.collection("ads").document(adId).get().await()
+                if (adsDoc.exists()) {
+                    firestore.collection("ads")
+                        .document(adId)
+                        .update("clicks", com.google.firebase.firestore.FieldValue.increment(1))
+                        .await()
+                    android.util.Log.d("AdRepo", "Recorded click for ad $adId in 'ads'")
+                }
+            }
         } catch (e: Exception) {
-            // Silently fail for clicks
+            android.util.Log.w("AdRepo", "Failed to record click for $adId: ${e.message}")
         }
     }
     
@@ -588,6 +651,28 @@ class AdvertisementRepository @Inject constructor(
                 )
             )
             .await()
+    }
+    
+    /**
+     * Expire an advertisement when its end date has passed
+     */
+    private suspend fun expireAd(adId: String) {
+        if (adId.isBlank()) return
+        android.util.Log.d("AdRepo", "Expiring ad: $adId")
+        try {
+            firestore.collection("advertisements")
+                .document(adId)
+                .update(
+                    mapOf(
+                        "status" to AdStatus.EXPIRED.name,
+                        "updatedAt" to Timestamp.now()
+                    )
+                )
+                .await()
+            android.util.Log.d("AdRepo", "Ad expired successfully: $adId")
+        } catch (e: Exception) {
+            android.util.Log.e("AdRepo", "Failed to expire ad $adId: ${e.message}")
+        }
     }
     
     /**
@@ -669,17 +754,56 @@ class AdvertisementRepository @Inject constructor(
     
     /**
      * Delete an advertisement (keeps billing history)
+     * Checks both 'advertisements' and 'ads' collections
      */
     suspend fun deleteAdvertisement(adId: String): Result<Unit> = runCatching {
-        // Get ad to save billing history and delete images
-        val ad = firestore.collection("advertisements")
+        android.util.Log.d("AdRepo", "Attempting to delete ad: $adId")
+        
+        // Try to get ad from 'advertisements' collection first
+        var ad = firestore.collection("advertisements")
             .document(adId)
             .get()
             .await()
             .toObject(Advertisement::class.java)
         
+        var collectionName = "advertisements"
+        
+        // If not found in 'advertisements', check 'ads' collection
+        if (ad == null) {
+            android.util.Log.d("AdRepo", "Ad not found in 'advertisements', checking 'ads' collection...")
+            val adsDoc = firestore.collection("ads")
+                .document(adId)
+                .get()
+                .await()
+            
+            if (adsDoc.exists()) {
+                collectionName = "ads"
+                // Parse the 'ads' collection format
+                val data = adsDoc.data
+                if (data != null) {
+                    ad = Advertisement(
+                        id = adsDoc.id,
+                        advertiserId = data["userId"] as? String ?: "",
+                        businessName = data["businessName"] as? String ?: "",
+                        title = data["title"] as? String ?: "",
+                        description = data["description"] as? String ?: "",
+                        imageUrl = data["imageUri"] as? String,
+                        logoUrl = data["logoUri"] as? String,
+                        createdAt = data["createdAt"] as? Timestamp ?: Timestamp.now()
+                    )
+                }
+            }
+        }
+        
+        if (ad == null) {
+            android.util.Log.w("AdRepo", "Ad not found in any collection: $adId")
+            throw Exception("Ad not found")
+        }
+        
+        android.util.Log.d("AdRepo", "Found ad in '$collectionName' collection: ${ad.title}")
+        
         // Save billing history before deleting
-        if (ad != null && ad.paymentStatus == PaymentStatus.COMPLETED) {
+        if (ad.paymentStatus == PaymentStatus.COMPLETED) {
             val billingRecord = hashMapOf(
                 "id" to adId,
                 "advertiserId" to ad.advertiserId,
@@ -706,7 +830,7 @@ class AdvertisementRepository @Inject constructor(
         }
         
         // Delete image from storage
-        ad?.imageUrl?.let { url ->
+        ad.imageUrl?.let { url ->
             if (url.startsWith("https://firebasestorage")) {
                 try {
                     storage.getReferenceFromUrl(url).delete().await()
@@ -717,7 +841,7 @@ class AdvertisementRepository @Inject constructor(
         }
         
         // Delete logo from storage
-        ad?.logoUrl?.let { url ->
+        ad.logoUrl?.let { url ->
             if (url.startsWith("https://firebasestorage")) {
                 try {
                     storage.getReferenceFromUrl(url).delete().await()
@@ -727,13 +851,13 @@ class AdvertisementRepository @Inject constructor(
             }
         }
         
-        // Delete from Firestore
-        firestore.collection("advertisements")
+        // Delete from the correct Firestore collection
+        firestore.collection(collectionName)
             .document(adId)
             .delete()
             .await()
         
-        android.util.Log.d("AdRepo", "Ad deleted successfully: $adId")
+        android.util.Log.d("AdRepo", "Ad deleted successfully from '$collectionName': $adId")
     }
     
     /**

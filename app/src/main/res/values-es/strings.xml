@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">BoatTaxie</string>
+    <string name="app_name">OmniMap</string>
     
     <!-- Common -->
     <string name="loading">Cargando...</string>
@@ -15,8 +15,8 @@
     <string name="ok">OK</string>
     
     <!-- Auth -->
-    <string name="welcome_title">Bienvenido a BoatTaxie</string>
-    <string name="welcome_subtitle">Reserva botes y taxis fácilmente</string>
+    <string name="welcome_title">Bienvenido a OmniMap</string>
+    <string name="welcome_subtitle">Todo. En todas partes. En vivo.</string>
     <string name="login">Iniciar Sesión</string>
     <string name="sign_up">Registrarse</string>
     <string name="logout">Cerrar Sesión</string>
@@ -30,7 +30,7 @@
     <string name="dont_have_account">¿No tienes cuenta? Regístrate</string>
     
     <!-- User Type Selection -->
-    <string name="select_user_type">¿Cómo usarás BoatTaxie?</string>
+    <string name="select_user_type">¿Cómo usarás OmniMap?</string>
     <string name="rider">Pasajero</string>
     <string name="rider_description">Reserva botes y taxis para tus viajes</string>
     <string name="captain">Capitán / Conductor</string>
@@ -88,7 +88,7 @@
     <string name="one_week">1 Semana</string>
     <string name="one_month">1 Mes</string>
     <string name="day_pass">Pase Diario</string>
-    <string name="day_pass_price">$2.99/día</string>
+    <string name="day_pass_price">$1.99/día</string>
     <string name="week_pass">Pase Semanal</string>
     <string name="week_pass_price">$14.99/semana</string>
     <string name="month_pass">Pase Mensual</string>
@@ -182,7 +182,33 @@
     <string name="book">Reservar</string>
     <string name="trips">Viajes</string>
     <string name="ads">Anuncios</string>
+    <string name="explore">Explorar</string>
     <string name="driver">Conductor</string>
+    
+    <!-- Explore Screen - Real-time Places -->
+    <string name="explore_title">Explorar Lugares</string>
+    <string name="explore_search_hint">Buscar restaurantes, bares, tours...</string>
+    <string name="explore_places_found">lugares</string>
+    <string name="explore_nearby_places">Lugares Cercanos</string>
+    <string name="explore_open_now">Abierto Ahora</string>
+    <string name="explore_closed">Cerrado</string>
+    <string name="explore_book_boat">Reservar Bote Aquí</string>
+    <string name="explore_directions">Ver Direcciones</string>
+    <string name="explore_call">Llamar</string>
+    <string name="explore_website">Sitio Web</string>
+    <string name="explore_reviews">reseñas</string>
+    <string name="explore_no_results">No se encontraron lugares</string>
+    <string name="explore_loading">Cargando lugares...</string>
+    <string name="explore_error">Error al cargar lugares</string>
+    <string name="explore_filter_all">Todos</string>
+    <string name="explore_filter_food">Comida</string>
+    <string name="explore_filter_nightlife">Vida Nocturna</string>
+    <string name="explore_filter_tours">Tours</string>
+    <string name="explore_filter_hotels">Hoteles</string>
+    <string name="explore_filter_attractions">Atracciones</string>
+    <string name="explore_busy_now">Muy concurrido</string>
+    <string name="explore_not_busy">Poco concurrido</string>
+    
     <string name="how_to_book">📍 Cómo Reservar:</string>
     <string name="how_to_book_steps">1. Toca \'Reservar Bote\' o \'Reservar Taxi\'\n2. Toca en el mapa para el punto de recogida\n3. Toca de nuevo para tu destino\n4. Toca \'Ver Tarifa\' y luego \'Reservar\'</string>
     <string name="tap_on_map_instructions">Toca en el mapa para establecer tu recogida y destino</string>
@@ -197,6 +223,8 @@
     <string name="rides">viajes</string>
     <string name="request">Solicitar</string>
     <string name="cancel_ride">Cancelar Viaje</string>
+    <string name="how_many_people">¿Cuántas personas?</string>
+    <string name="passengers">Pasajeros</string>
     <string name="set_pickup">Punto de Recogida</string>
     <string name="set_dropoff">Punto de Destino</string>
     <string name="ride_complete">Viaje Completado</string>
@@ -268,13 +296,14 @@
     
     <!-- Subscription Banner -->
     <string name="subscribe_to_book">Suscríbete para Reservar</string>
-    <string name="starting_at_price">Desde solo $2.99/día</string>
+    <string name="starting_at_price">Desde solo $1.99/día</string>
     <string name="days_remaining">%d días restantes</string>
     <string name="subscription_expires_soon">Tu suscripción expira pronto</string>
     <string name="manage">Administrar</string>
     
     <!-- Profile Screen -->
     <string name="profile_photo">Foto de perfil</string>
+    <string name="driver_photo">Foto del conductor</string>
     <string name="user">Usuario</string>
     <string name="trip_history">Historial de Viajes</string>
     <string name="view_past_rides">Ver tus viajes anteriores</string>
@@ -433,6 +462,22 @@
     <string name="popular_destinations">Destinos Populares</string>
     <string name="map_button">Mapa</string>
     <string name="subscribe_button">Suscribirse</string>
+    <string name="explore_map">🗺️ Explorar Mapa</string>
+    <string name="subscribe_star">⭐ Suscribirse</string>
+    <string name="how_to_use_app">Cómo Usar Esta App</string>
+    <string name="unlock_unlimited_rides">Desbloquea Viajes Ilimitados</string>
+    <string name="subscribe_anytime">Suscríbete para reservar botes y taxis en cualquier momento</string>
+    <string name="starting_at">Desde</string>
+    <string name="per_day">/día</string>
+    <string name="what_you_get">Lo Que Obtienes</string>
+    <string name="benefit_unlimited_boats">Reservas de botes ilimitadas</string>
+    <string name="benefit_unlimited_taxis">Reservas de taxis ilimitadas</string>
+    <string name="benefit_flexible_plans">Planes flexibles (1 día a 1 mes)</string>
+    <string name="benefit_save_percent">Ahorra hasta 45%% con planes más largos</string>
+    <string name="benefit_cancel_anytime">Cancela en cualquier momento</string>
+    <string name="view_plans">Ver Planes</string>
+    <string name="see_plans_subscribe">Ver Planes y Suscribirse</string>
+    <string name="subscribe_to_book_desc">Suscríbete para reservar botes y taxis</string>
     <string name="pay_credit_card">Pagar con Tarjeta de Crédito</string>
     <string name="reopen_payment">Reabrir Página de Pago</string>
     <string name="payment_opened">Página de pago abierta en navegador</string>
@@ -447,4 +492,443 @@
     <string name="ad_on_phones">%d personas tienen tu anuncio en su teléfono</string>
     <string name="impressions">Impresiones</string>
     <string name="clicks">Clics</string>
+    
+    <!-- Help Dialog -->
+    <string name="help_title">Cómo Usar Boat Taxie</string>
+    <string name="help_subtitle">Guía Completa</string>
+    <string name="help_getting_started">📱 Comenzando</string>
+    <string name="help_how_to_book">🚤 Cómo Reservar</string>
+    <string name="help_search">🔍 Búsqueda</string>
+    <string name="help_map_features">📍 Funciones del Mapa</string>    <string name="help_explore">🗺️ Mapa Explorar</string>    <string name="help_island_deals">🏝️ Ofertas de la Isla</string>
+    <string name="help_subscription">💳 Suscripción</string>
+    <string name="help_driver_mode">👤 Modo Conductor</string>
+    <string name="help_tips_faq">⚙️ Consejos y FAQ</string>
+    
+    <!-- Help - Getting Started Section -->
+    <string name="help_getting_started_title">📱 Comenzando con OmniMap</string>
+    <string name="help_getting_started_intro">¡Bienvenido a OmniMap - Todo. En Todas Partes. En Vivo. ¡Explora el mundo y reserva viajes en Bocas del Toro!</string>
+    <string name="help_step_open_app">Abre la App</string>
+    <string name="help_step_open_app_desc">Cuando abras la app, verás un mapa de Bocas del Toro con tu ubicación actual (punto azul) y todos los muelles, hoteles, restaurantes y puntos de interés disponibles marcados en el mapa.</string>
+    <string name="help_step_allow_location">Permitir Acceso a Ubicación</string>
+    <string name="help_step_allow_location_desc">Asegúrate de permitir acceso a ubicación para que la app pueda mostrar dónde estás y ayudar a los conductores a encontrarte. Tu punto azul muestra tu posición exacta en el mapa.</string>
+    <string name="help_step_explore_map">Explorar el Mapa</string>
+    <string name="help_step_explore_map_desc">Pellizca para acercar/alejar, o usa los botones +/-. ¡Tu marcador "Estás Aquí" se actualiza en tiempo real mientras te mueves! Toca cualquier marcador para ver detalles. Busca "dock" para ver los 85+ muelles.</string>
+    <string name="help_tip_realtime_drivers">¡La insignia verde muestra usuarios en línea (pasajeros + conductores). ¡Mira los íconos de bote 🚤 y taxi 🚕 moverse en vivo en el mapa!</string>
+    <string name="help_tip_discovery">¡Camina dentro de 50 pies (~15m) de cualquier lugar y se auto-descubre! La pestaña Explorar muestra ubicaciones cercanas mientras te mueves.</string>
+    <string name="help_tip_language">Toca el botón de bandera (🇺🇸/🇪🇸) para cambiar entre inglés y español.</string>
+    
+    <!-- Help - How to Book Section -->
+    <string name="help_how_to_book_title">🚤 Cómo Reservar un Taxi Acuático</string>
+    <string name="help_how_to_book_intro">Sigue estos pasos para reservar tu viaje en taxi acuático:</string>
+    <string name="help_step_set_pickup">Establece Tu Ubicación de Recogida</string>
+    <string name="help_step_set_pickup_desc">Toca en el mapa donde quieres que te recojan, O toca el botón verde \'Recogida\' en la parte inferior y busca un muelle/ubicación. Tu punto de recogida se mostrará como un marcador VERDE.</string>
+    <string name="help_step_set_dropoff">Establece Tu Ubicación de Destino</string>
+    <string name="help_step_set_dropoff_desc">Toca en otra ubicación en el mapa para tu destino, O toca el botón rojo \'Destino\' y busca. Tu punto de destino se muestra como un marcador ROJO.</string>
+    <string name="help_step_see_route">Ver la Ruta</string>
+    <string name="help_step_see_route_desc">Una vez que ambas ubicaciones estén establecidas, verás una línea AZUL mostrando la ruta del bote a través del agua.</string>
+    <string name="help_step_passengers">Elegir Número de Pasajeros</string>
+    <string name="help_step_passengers_desc">Usa los botones +/- para establecer cuántos pasajeros (1-10). El precio se ajusta por persona para viajes compartidos.</string>
+    <string name="help_step_confirm">Tocar \'Confirmar Reserva\'</string>
+    <string name="help_step_confirm_desc">Presiona el botón grande en la parte inferior para enviar tu solicitud de reserva. Tu solicitud va a TODOS los conductores de botes en línea en el área.</string>
+    <string name="help_step_wait">Esperar a que un Conductor Acepte</string>
+    <string name="help_step_wait_desc">El panel se pone AMARILLO mostrando \'Buscando conductor...\'. Los conductores ven tu solicitud y pueden aceptar. Esto usualmente toma 1-5 minutos.</string>
+    <string name="help_step_driver_accepts">El Conductor Acepta con Precio - ¡Estás Reservado!</string>
+    <string name="help_step_driver_accepts_desc">Cuando un conductor acepta, confirmará el precio del viaje. El panel se pone VERDE mostrando el nombre del conductor, foto, calificación, información del bote, número de teléfono, y el precio confirmado. ¡Ya viene en camino!</string>
+    <string name="help_step_track">Rastrear Tu Conductor</string>
+    <string name="help_step_track_desc">Observa el ícono del bote del conductor moverse hacia tu ubicación de recogida en tiempo real. Verás el estado \'Conductor en camino\' o \'Conductor llegó\'.</string>
+    <string name="help_step_call">Llamar a Tu Conductor (si es necesario)</string>
+    <string name="help_step_call_desc">Toca el ícono de teléfono para llamar a tu conductor directamente si necesitas comunicar detalles de recogida.</string>
+    <string name="help_step_enjoy">¡Disfruta Tu Viaje y Paga!</string>
+    <string name="help_step_enjoy_desc">¡Sube al bote, disfruta el viaje! El pago se hace directamente al conductor en EFECTIVO (USD) al final de tu viaje.</string>
+    <string name="help_tip_no_cancel">Una vez que envíes una solicitud de reserva, por favor espera a que un conductor acepte. NO SE PERMITEN CANCELACIONES después de reservar.</string>
+    <string name="help_tip_rate">Después de tu viaje, puedes calificar a tu conductor 1-5 estrellas. ¡Las buenas calificaciones ayudan a otros pasajeros a elegir excelentes conductores!</string>
+    <string name="help_tip_cash">El conductor confirmará el precio final cuando acepte tu viaje. Paga en EFECTIVO (USD) al final de tu viaje.</string>
+    
+    <!-- Help - Search Section -->
+    <string name="help_search_title">🔍 Búsqueda y Navegación</string>
+    <string name="help_search_intro">Dos formas de buscar lugares:</string>
+    <string name="help_search_magnifying">🔍 Botón de Lupa (Arriba Izquierda)</string>
+    <string name="help_search_magnifying_desc">• Busca TODO: muelles, negocios, conductores, hoteles, restaurantes\n• Muestra chips de búsqueda rápida: Muelles, Marinas, Ferry, Hoteles, Comida, Playa, Bares, Tours, Isla, Surf, Snorkel, Yoga\n• Escribe cualquier nombre para encontrarlo instantáneamente\n• Los resultados muestran la ubicación en el mapa cuando se tocan</string>
+    <string name="help_search_dock">🔍 Botón \'Buscar Muelle y Lugares\' (Arriba Derecha)</string>
+    <string name="help_search_dock_desc">• Muestra TODAS las 85+ ubicaciones organizadas por categoría\n• Filtra por: Todo, Muelles, Restaurantes, Hoteles, Resorts, Islas, Playas, Sitios de Delfines, Islas Hopping, Tours\n• Toca cualquier resultado para ESTABLECERLO COMO TU DESTINO\n• Muestra descripciones completas de cada lugar\n• ¡Excelente para explorar lo que está disponible en Bocas!</string>
+    <string name="help_tip_discover">¡Toca \'Buscar Muelle y Lugares\' y luego navega por categorías para descubrir playas, restaurantes y hoteles que quizás no conocías!</string>
+    <string name="help_tip_dropoff_set">Cuando tocas un resultado de búsqueda en \'Buscar Muelle y Lugares\', automáticamente establece esa ubicación como tu DESTINO.</string>
+    
+    <!-- Help - Map Features Section -->
+    <string name="help_map_features_title">📍 Funciones del Mapa</string>
+    <string name="help_map_features_intro">Entendiendo los botones y marcadores del mapa:</string>
+    <string name="help_top_left_buttons">🔲 Botones Arriba Izquierda:</string>
+    <string name="help_btn_home">Botón INICIO - Regresa a la pantalla principal de reserva desde cualquier lugar</string>
+    <string name="help_btn_language">Botón IDIOMA - Toca para cambiar entre inglés y español</string>
+    <string name="help_btn_search">Botón BÚSQUEDA - Abre el diálogo de búsqueda principal</string>
+    <string name="help_btn_deals">OFERTAS DE ISLA - Mostrar/Ocultar anuncios de negocios en el mapa (verde = mostrando)</string>
+    <string name="help_top_right_buttons">🔲 Botones Arriba Derecha:</string>
+    <string name="help_btn_drivers_online">CONDUCTORES EN LÍNEA - Muestra cantidad de conductores de botes y taxis en línea. Toca para mostrar/ocultar íconos de conductores en el mapa</string>
+    <string name="help_btn_users_online">USUARIOS EN LÍNEA - Muestra total de usuarios con la app abierta (pasajeros + conductores). ¡Se actualiza en tiempo real!</string>
+    <string name="help_btn_search_dock">BUSCAR MUELLE Y LUGARES - Abre búsqueda por categorías con 85+ ubicaciones</string>
+    <string name="help_btn_show_docks">MOSTRAR/OCULTAR MUELLES - Alternar todos los marcadores de muelles/ubicaciones en el mapa</string>
+    <string name="help_map_markers">📍 Marcadores del Mapa:</string>
+    <string name="help_marker_blue">PUNTO AZUL - Tu ubicación actual (¡se actualiza en tiempo real mientras te mueves!)</string>
+    <string name="help_marker_you_here">ESTÁS AQUÍ - Marcador azul mostrando tu posición exacta, se mueve contigo en tiempo real</string>
+    <string name="help_marker_green">MARCADOR VERDE - Tu ubicación de recogida</string>
+    <string name="help_marker_red">MARCADOR ROJO - Tu ubicación de destino</string>
+    <string name="help_marker_anchor">ÍCONOS DE ANCLA - Ubicaciones de muelles/marinas</string>
+    <string name="help_marker_boat">ÍCONOS DE BOTE - Conductores de botes en línea (moviéndose en tiempo real)</string>
+    <string name="help_marker_taxi">ÍCONOS DE TAXI - Conductores de taxi en línea</string>
+    <string name="help_marker_ad">MARCADORES DE ANUNCIOS - Anuncios de negocios (Ofertas de Isla) - toca para ver detalles</string>
+    <string name="help_zoom_controls">🔎 Controles de Zoom:</string>
+    <string name="help_zoom_in">Botón + (lado izquierdo) - Acercar para vista más cercana</string>
+    <string name="help_zoom_out">Botón - (lado izquierdo) - Alejar para vista más amplia</string>
+    <string name="help_zoom_pinch">Pellizcar con dos dedos para acercar/alejar</string>
+    <string name="help_zoom_double">Doble toque para acercar rápidamente</string>
+    
+    <!-- Help - Island Deals Section -->
+    <string name="help_island_deals_title">🏝️ Ofertas de Isla y Anuncios de Negocios</string>
+    <string name="help_island_deals_intro">¡Descubre negocios locales y ofertas especiales!</string>
+    <string name="help_step_see_ads">Ver Anuncios en el Mapa</string>
+    <string name="help_step_see_ads_desc">Los anuncios de negocios aparecen como marcadores coloridos en el mapa. Toca cualquier marcador de anuncio para ver los detalles completos del negocio, fotos, descripción e información de contacto.</string>
+    <string name="help_step_toggle_ads">Alternar Anuncios Encendido/Apagado</string>
+    <string name="help_step_toggle_ads_desc">Toca el botón \'🏝️ Mostrar Ofertas\' / \'Ocultar Ofertas\' en la parte superior para mostrar u ocultar todos los anuncios de negocios en el mapa. Verde significa que los anuncios son visibles.</string>
+    <string name="help_step_view_details">Ver Detalles del Negocio</string>
+    <string name="help_step_view_details_desc">Cuando tocas un anuncio, aparece un popup mostrando: Nombre del negocio, categoría, descripción, foto, número de teléfono (toca para llamar) y ubicación exacta.</string>
+    <string name="help_advertise_title">🏪 ¿Quieres Anunciar TU Negocio?</string>
+    <string name="help_advertise_intro">¡Los dueños de negocios pueden crear anuncios para aparecer en el mapa para todos los usuarios de Boat Taxie!</string>
+    <string name="help_step_go_home">Ir a Pantalla de Inicio</string>
+    <string name="help_step_go_home_desc">Toca el botón INICIO (🏠) para regresar al menú principal.</string>
+    <string name="help_step_tap_deals">Tocar \'Ofertas de Isla\'</string>
+    <string name="help_step_tap_deals_desc">Encuentra la tarjeta \'Ofertas de Isla\' en la pantalla de inicio y tócala.</string>
+    <string name="help_step_create_ad">Crear Tu Anuncio</string>
+    <string name="help_step_create_ad_desc">Llena el nombre de tu negocio, selecciona una categoría (Restaurante, Hotel, Tour, etc.), agrega una descripción, sube una foto y establece tu ubicación en el mapa.</string>
+    <string name="help_step_add_contact">Agregar Información de Contacto</string>
+    <string name="help_step_add_contact_desc">Ingresa tu número de teléfono y cualquier otro detalle de contacto para que los clientes puedan contactarte.</string>
+    <string name="help_step_choose_duration">Elegir Duración del Anuncio</string>
+    <string name="help_step_choose_duration_desc">Selecciona cuánto tiempo quieres que corra tu anuncio (1 semana, 1 mes, 3 meses, etc.). ¡Las duraciones más largas ofrecen mejor valor!</string>
+    <string name="help_step_submit_pay">Enviar y Pagar</string>
+    <string name="help_step_submit_pay_desc">Revisa tu anuncio y envíalo. Se requiere pago para activar tu anuncio en el mapa.</string>
+    <string name="help_tip_ad_pricing">¡Los precios de anuncios varían según la duración. Contacta soporte para tarifas actuales y promociones especiales!</string>
+    
+    <!-- Help - Subscription Section -->
+    <string name="help_subscription_title">💳 Planes de Suscripción</string>
+    <string name="help_subscription_intro">¡Desbloquea funciones premium con una suscripción!</string>
+    <string name="help_for_drivers">🚤 Para Conductores:</string>
+    <string name="help_driver_benefits_title">Beneficios de Suscripción para Conductores:</string>
+    <string name="help_driver_benefits">✅ Aparecer en el mapa para que los pasajeros te vean\n✅ Recibir solicitudes de reserva de pasajeros\n✅ Establecer tus propios precios por ruta\n✅ Rastrear tus ganancias y viajes\n✅ Construir tu calificación y reputación\n✅ Aceptar reservas ilimitadas</string>
+    <string name="help_how_subscribe_driver">Cómo Suscribirse como Conductor:</string>
+    <string name="help_step_driver_home">Ir a Pantalla de Inicio</string>
+    <string name="help_step_driver_home_desc">Toca INICIO (🏠) para ir al menú principal.</string>
+    <string name="help_step_driver_mode">Tocar \'Modo Conductor\'</string>
+    <string name="help_step_driver_mode_desc">Encuentra y toca la opción \'Modo Conductor\'.</string>
+    <string name="help_step_register_driver">Registrarse como Conductor</string>
+    <string name="help_step_register_driver_desc">Llena tus datos: nombre completo, número de teléfono, tipo de vehículo (bote o taxi), placa y sube una foto.</string>
+    <string name="help_step_choose_plan">Elegir Plan de Suscripción</string>
+    <string name="help_step_choose_plan_desc">Selecciona la duración de tu suscripción: Semanal, Mensual o Anual. ¡Los planes más largos ofrecen mejores ahorros!</string>
+    <string name="help_step_complete_payment">Completar Pago</string>
+    <string name="help_step_complete_payment_desc">Paga mediante los métodos de pago disponibles. Tu suscripción se activa inmediatamente.</string>
+    <string name="help_step_go_online">¡Ponerse En Línea!</string>
+    <string name="help_step_go_online_desc">Una vez suscrito, activa \'En Línea\' para comenzar a aparecer en el mapa y recibir solicitudes de reserva!</string>
+    <string name="help_tip_free_trial">¡Puede haber prueba gratuita disponible para nuevos conductores! Revisa la pantalla de Modo Conductor para promociones actuales.</string>
+    <string name="help_tip_auto_renew">Tu suscripción se renueva automáticamente. Puedes cancelar en cualquier momento desde la configuración de tu perfil.</string>
+    
+    <!-- Help - Driver Mode Section -->
+    <string name="help_driver_mode_title">👤 Modo Conductor</string>
+    <string name="help_driver_mode_intro">¡Conviértete en conductor de taxi acuático y gana dinero!</string>
+    <string name="help_step_access_driver">Acceder a Modo Conductor</string>
+    <string name="help_step_access_driver_desc">Desde la pantalla de Inicio, toca \'Modo Conductor\' o \'Convertirse en Conductor\' para cambiar a la interfaz de conductor.</string>
+    <string name="help_step_register_vehicle">Registrar Tu Vehículo</string>
+    <string name="help_step_register_vehicle_desc">Ingresa la información de tu bote/taxi: tipo, capacidad, placa y una foto de tu vehículo.</string>
+    <string name="help_step_set_prices">Establecer Tus Precios</string>
+    <string name="help_step_set_prices_desc">Ve a \'Mis Precios\' para establecer tus tarifas para diferentes rutas. ¡Tú controlas cuánto cobras por viaje!</string>
+    <string name="help_step_go_online_desc2">Activa el interruptor \'En Línea\' para comenzar a aparecer en el mapa del pasajero. Tu ubicación se actualiza en tiempo real.</string>
+    <string name="help_step_receive_requests">Recibir Solicitudes de Reserva</string>
+    <string name="help_step_receive_requests_desc">Cuando un pasajero reserva, escucharás un sonido y verás la solicitud con ubicaciones de recogida/destino y cantidad de pasajeros. Toca \'Aceptar\' o \'Rechazar\'.</string>
+    <string name="help_step_navigate_pickup">Navegar a Recogida</string>
+    <string name="help_step_navigate_pickup_desc">Después de aceptar, navega a la ubicación de recogida del pasajero. La app muestra su posición exacta. Toca \'Llegué\' cuando llegues allí.</string>
+    <string name="help_step_start_trip">Iniciar el Viaje</string>
+    <string name="help_step_start_trip_desc">Una vez que el pasajero aborde, toca \'Iniciar Viaje\' para comenzar el viaje.</string>
+    <string name="help_step_complete_trip">Completar el Viaje</string>
+    <string name="help_step_complete_trip_desc">Cuando llegues al destino, toca \'Completar Viaje\'. Cobra el pago en EFECTIVO del pasajero.</string>
+    <string name="help_driver_features">📊 Funciones de Conductor:</string>
+    <string name="help_tip_my_prices">MIS PRECIOS - Establece precios personalizados para cada ruta (ej., Bocas a Carenero = $3)</string>
+    <string name="help_tip_earnings">GANANCIAS - Ve tus ganancias diarias, semanales y mensuales</string>
+    <string name="help_tip_ratings">CALIFICACIONES - Ve tu calificación promedio de los pasajeros</string>
+    <string name="help_tip_trip_history">HISTORIAL DE VIAJES - Revisa todos tus viajes completados</string>
+    <string name="help_tip_notifications">NOTIFICACIONES - Recibe alertas de nuevas solicitudes de reserva</string>
+    
+    <!-- Help - Explore Map Section -->
+    <string name="help_explore_map_title">🗺️ Funciones del Mapa Explorar</string>
+    <string name="help_explore_map_intro">¡Descubre lugares mientras caminas o conduces por Bocas!</string>
+    <string name="help_explore_realtime">Seguimiento de Ubicación en Tiempo Real</string>
+    <string name="help_explore_realtime_desc">Tu marcador \'Estás Aquí\' se actualiza en tiempo real mientras te mueves. ¡Mira cómo te sigue en el mapa!</string>
+    <string name="help_explore_discovery">Descubrimiento de Lugares en Vivo</string>
+    <string name="help_explore_discovery_desc">Cuando llegas a 50 pies (~15 metros) de un lugar registrado, oferta o negocio, ¡la app automáticamente te muestra información!</string>
+    <string name="help_explore_online">Ver Quién Está En Línea</string>
+    <string name="help_explore_online_desc">La insignia \'X En Línea\' muestra el total de usuarios con la app abierta ahora mismo - tanto pasajeros como conductores. ¡Excelente para medir la actividad!</string>
+    <string name="help_explore_tip_walk">CAMINA POR AHÍ - La app detecta cuando estás cerca de un negocio y te muestra ofertas automáticamente</string>
+    <string name="help_explore_tip_realtime">TIEMPO REAL - Tu marcador de ubicación se mueve contigo mientras exploras el área</string>
+    <string name="help_explore_tip_online">CONTEO EN LÍNEA - Ve cuántas personas están usando OmniMap ahora mismo en Bocas</string>
+    <string name="help_explore_tip_search">BUSCAR TODO - Busca \'muelle\' para ver TODAS las 85+ ubicaciones de muelles a la vez</string>
+    
+    <!-- Help - Settings & Tips Section -->
+    <string name="help_settings_title">⚙️ Configuración y Consejos Pro</string>
+    <string name="help_settings_intro">¡Aprovecha al máximo Boat Taxie!</string>
+    <string name="help_pro_tips_title">💡 Consejos Pro:</string>
+    <string name="help_tip_best_times">MEJORES HORARIOS: Reserva temprano en la mañana o al final de la tarde cuando hay más conductores disponibles</string>
+    <string name="help_tip_be_precise">SÉ PRECISO: Establece tu recogida en un muelle exacto para recogidas más rápidas</string>
+    <string name="help_tip_communicate">COMUNÍCATE: Llama a tu conductor si el lugar de recogida es difícil de encontrar</string>
+    <string name="help_tip_cash_ready">EFECTIVO LISTO: Ten billetes pequeños listos - los conductores pueden no tener cambio para billetes grandes</string>
+    <string name="help_tip_group_rides">VIAJES EN GRUPO: ¿Viajando con amigos? Establece la cantidad de pasajeros para obtener precios compartidos precisos</string>
+    <string name="help_tip_rate_drivers">CALIFICA CONDUCTORES: ¡Las buenas calificaciones ayudan a que los excelentes conductores destaquen!</string>
+    <string name="help_faq_title">❓ Preguntas Frecuentes:</string>
+    <string name="help_faq_q1">P: ¿Cómo pago?</string>
+    <string name="help_faq_a1">R: El pago es en EFECTIVO directamente al conductor al final de tu viaje. USD es aceptado en todas partes en Bocas.</string>
+    <string name="help_faq_q2">P: ¿Qué pasa si ningún conductor acepta?</string>
+    <string name="help_faq_a2">R: Si ningún conductor acepta dentro de 5-10 minutos, intenta reservar de nuevo. Los conductores pueden estar ocupados o fuera de línea. También puedes intentar en horarios más concurridos.</string>
+    <string name="help_faq_q3">P: ¿Puedo programar un viaje por adelantado?</string>
+    <string name="help_faq_a3">R: Actualmente, Boat Taxie es para viajes a demanda. Para viajes programados, contacta a un conductor directamente después de tu primer viaje.</string>
+    <string name="help_faq_q4">P: ¿Se comparte mi ubicación?</string>
+    <string name="help_faq_a4">R: Tu ubicación solo se comparte con tu conductor DESPUÉS de que acepten tu reserva. Se usa para ayudarlos a encontrarte.</string>
+    <string name="help_faq_q5">P: ¿Qué pasa con el mal clima?</string>
+    <string name="help_faq_a5">R: Los conductores de botes pueden rechazar viajes en condiciones climáticas peligrosas por seguridad. Los conductores de taxi pueden seguir disponibles en Isla Colón.</string>
+    <string name="help_need_help">📞 ¿Necesitas Ayuda?</string>
+    <string name="help_email">Correo: support@boattaxie.com</string>
+    <string name="help_whatsapp">WhatsApp: Contáctanos para soporte rápido</string>
+    <string name="help_website">Sitio Web: www.boattaxie.com</string>
+    
+    <!-- Rating Screen -->
+    <string name="ride_complete_title">¡Viaje Completado!</string>
+    <string name="rate_your_captain">Califica a Tu Capitán</string>
+    <string name="rate_your_driver_title">Califica a Tu Conductor</string>
+    <string name="stars_singular">%d estrella</string>
+    <string name="stars_plural">%d estrellas</string>
+    <string name="submit_rating_button">Enviar Calificación</string>
+    <string name="skip_rating">Omitir</string>
+    <string name="your_driver">Tu Conductor</string>
+    <string name="your_captain">Tu Capitán</string>
+    
+    <!-- Misc UI -->
+    <string name="help">Ayuda</string>
+    <string name="help_button">❓ Ayuda</string>
+    
+    <!-- Search Dock & Places -->
+    <string name="search_dock_places">Buscar Muelle y Lugares</string>
+    <string name="search_by_name">Buscar por nombre...</string>
+    <string name="search_docks_places_businesses">Buscar muelles, lugares, negocios...</string>
+    <string name="quick_search">Búsqueda Rápida</string>
+    <string name="hide_deals">Ocultar Ofertas</string>
+    <string name="show_deals">Mostrar Ofertas</string>
+    <string name="hide_docks">Ocultar Muelles</string>
+    <string name="show_docks">Mostrar Muelles</string>
+    
+    <!-- My Ads Screen -->
+    <string name="my_ads">Mis Anuncios</string>
+    <string name="refresh_ads">Actualizar Anuncios</string>
+    <string name="ai_ad_generator">Generador de Anuncios IA</string>
+    <string name="create_ad">Crear Anuncio</string>
+    <string name="no_ads_yet">Sin Anuncios Aún</string>
+    <string name="no_ads_message">No has creado ningún anuncio. ¡Empieza a promocionar tu negocio!</string>
+    <string name="generate_drafts">Generar Borradores</string>
+    <string name="how_many_ads">¿Cuántos anuncios?</string>
+    <string name="edit_advertisement">Editar Anuncio</string>
+    <string name="images">Imágenes</string>
+    <string name="image">Imagen</string>
+    <string name="logo">Logo</string>
+    <string name="tap_to_change">Toca para cambiar</string>
+    <string name="business_name">Nombre del Negocio</string>
+    <string name="ad_title_label">Título del Anuncio</string>
+    <string name="description">Descripción</string>
+    <string name="website_url">URL del Sitio Web</string>
+    <string name="youtube_video_url">URL de Video YouTube</string>
+    <string name="coupon_details">Detalles del Cupón</string>
+    <string name="discount_example">Descuento (ej., 10%% DESC)</string>
+    <string name="coupon_description">Descripción del Cupón</string>
+    <string name="delete_advertisement">¿Eliminar Anuncio?</string>
+    <string name="delete_ad_confirm">¿Estás seguro de eliminar \"%s\"?</string>
+    <string name="billing_preserved">Tu historial de facturación se conservará para tus registros.</string>
+    <string name="youtube_video">Video de YouTube</string>
+    <string name="ad_being_viewed_title">¡Tu anuncio está siendo visto!</string>
+    <string name="ad_views_count">%d conductores y pasajeros lo han visto</string>
+    <string name="draft_payment_required">Borrador - Pago Requerido</string>
+    <string name="pay_to_activate">Paga para activar y publicar este anuncio</string>
+    <string name="edit">Editar</string>
+    <string name="activate">Activar</string>
+    <string name="pause">Pausar</string>
+    <string name="resume">Reanudar</string>
+    <string name="ctr">CTR</string>
+    
+    <!-- Subscription Screen -->
+    <string name="subscription">Suscripción</string>
+    <string name="subscription_active_title">Suscripción Activa</string>
+    <string name="plan_name">Plan %s</string>
+    <string name="days_remaining_label">Días Restantes</string>
+    <string name="price_paid">Precio Pagado</string>
+    <string name="your_benefits">Tus Beneficios</string>
+    <string name="unlimited_boat_bookings">Reservas de bote ilimitadas</string>
+    <string name="unlimited_taxi_bookings">Reservas de taxi ilimitadas</string>
+    <string name="priority_support">Soporte prioritario</string>
+    <string name="no_booking_fees">Sin cargos de reserva</string>
+    <string name="renew_subscription_btn">Renovar Suscripción</string>
+    <string name="cancel_subscription">Cancelar Suscripción</string>
+    <string name="choose_your_plan">Elige Tu Plan</string>
+    <string name="unlimited_rides">🚤 Viajes Ilimitados</string>
+    <string name="taxi_boat_cancel">Taxi + Bote • Cancela cuando quieras</string>
+    <string name="save_up_to">💡 Ahorra hasta 58%%</string>
+    <string name="select_your_plan">Selecciona tu plan:</string>
+    <string name="continue_price">Continuar - $%s</string>
+    <string name="select_a_plan">Selecciona un Plan</string>
+    <string name="all_plans_include">✅ Todos los planes incluyen:</string>
+    <string name="plans_benefits">• Viajes ilimitados en taxi y bote\n• Seguimiento en tiempo real\n• Soporte prioritario\n• Sin cargos ocultos</string>
+    <string name="complete_subscription">Completa Tu Suscripción</string>
+    <string name="order_summary">Resumen del Pedido</string>
+    <string name="subscription_days">Suscripción %s</string>
+    <string name="unlimited_rides_days">Viajes ilimitados por %d días</string>
+    <string name="you_save">🎊 Ahorras $%s (%d%% desc)!</string>
+    <string name="whats_included">✅ Qué Incluye</string>
+    
+    <!-- Tap Dock/Map for Pickup/Dropoff -->
+    <string name="tap_dock_pickup">Toca el muelle para RECOGER</string>
+    <string name="tap_dock_dropoff">Toca el muelle para DEJAR</string>
+    <string name="tap_map_pickup">Toca el mapa para RECOGER</string>
+    <string name="tap_map_dropoff">Toca el mapa para DEJAR</string>
+    
+    <!-- Booking Screen - Boat/Taxi/Captain/Driver text -->
+    <string name="boat_label">Bote</string>
+    <string name="taxi_label">Taxi</string>
+    <string name="captain_label">Capitán</string>
+    <string name="driver_label">Conductor</string>
+    <string name="boat_on_the_way">🚤 ¡En camino!</string>
+    <string name="taxi_on_the_way">🚗 ¡En camino!</string>
+    <string name="captain_arrived">📍 ¡Capitán llegó!</string>
+    <string name="driver_arrived_status">📍 ¡Conductor llegó!</string>
+    <string name="captain_on_way">¡El capitán está en camino!</string>
+    <string name="driver_on_way_status">¡El conductor está en camino!</string>
+    <string name="captain_title">🚤 Capitán</string>
+    <string name="driver_title">🚕 Conductor</string>
+    
+    <!-- Create Ad Screen -->
+    <string name="create_ad_title">Crear Anuncio</string>
+    <string name="how_ad_shown">Cómo Se Mostrará Tu Anuncio</string>
+    <string name="ad_map_info">Tu anuncio aparece como un marcador en el mapa para todos los pasajeros en tu área</string>
+    <string name="ad_featured_info">Los anuncios destacados tienen un marcador resaltado y ubicación prioritaria</string>
+    <string name="ad_coupon_info">¡Agrega un cupón para atraer más clientes - pueden tocar para canjearlo!</string>
+    <string name="ad_logo_info">¡Sube tu logo - aparecerá directamente en el marcador del mapa!</string>
+    <string name="add_image">Agregar Imagen</string>
+    <string name="business_logo">Logo del Negocio (aparece en el mapa)</string>
+    <string name="upload_logo_desc">Sube un logo cuadrado para tu negocio.\n¡Este aparecerá en el marcador del mapa!</string>
+    <string name="add_logo">Agregar Logo</string>
+    <string name="youtube_url_optional">URL de Video YouTube (opcional)</string>
+    <string name="youtube_placeholder">https://youtube.com/watch?v=...</string>
+    <string name="category">Categoría</string>
+    <string name="business_location">📍 Ubicación del Negocio</string>
+    <string name="location_desc">Elige la ubicación de tu negocio para que los pasajeros te encuentren</string>
+    <string name="choose_on_map">Elegir en el Mapa</string>
+    <string name="location_selected">Ubicación seleccionada ✓</string>
+    <string name="tap_to_select_location">Toca el mapa para seleccionar</string>
+    <string name="or_search_by_name">O busca por nombre:</string>
+    <string name="search_location">Buscar ubicación...</string>
+    <string name="search_example">ej., Casco Viejo, Ciudad de Panamá</string>
+    <string name="or_select_area">O selecciona área popular:</string>
+    <string name="add_coupon">🎟️ Agregar Cupón</string>
+    <string name="coupon_attract">Atrae más clientes con una oferta especial</string>
+    <string name="coupon_code_label">Código de Cupón</string>
+    <string name="generate_new_code">Generar Nuevo Código</string>
+    <string name="discount_label">Descuento:</string>
+    <string name="or_custom_discount">O descuento personalizado</string>
+    <string name="custom_discount_placeholder">ej., APERITIVO GRATIS</string>
+    <string name="coupon_details_optional">Detalles del Cupón (opcional)</string>
+    <string name="coupon_details_placeholder">ej., Válido solo para consumo local. Compra mín. $20</string>
+    <string name="max_redemptions">Canjes Máximos (deja vacío para ilimitado)</string>
+    <string name="max_redemptions_placeholder">ej., 100</string>
+    <string name="coupon_preview">🎟️ VISTA PREVIA DEL CUPÓN</string>
+    <string name="code_label">Código: %s</string>
+    <string name="contact_info">Información de Contacto</string>
+    <string name="phone_optional">Teléfono (opcional)</string>
+    <string name="email_optional">Correo (opcional)</string>
+    <string name="website_optional">Sitio Web (opcional)</string>
+    <string name="featured_ad_label">Anuncio Destacado</string>
+    <string name="get_more_visibility">Obtén más visibilidad</string>
+    <string name="have_promo_code">¿Tienes un Código Promocional?</string>
+    <string name="promo_code">Código Promocional</string>
+    <string name="enter_promo_code">Ingresa código promocional</string>
+    <string name="apply">Aplicar</string>
+    <string name="applied">Aplicado ✓</string>
+    <string name="invalid_promo">Código promocional inválido</string>
+    <string name="promo_active">¡Promo Activa!</string>
+    <string name="promo_code_applied">Código Promocional Aplicado</string>
+    <string name="free_subscription_active">¡Suscripción GRATIS Activa!</string>
+    <string name="lifetime_access">Tienes acceso de por vida a todos los viajes</string>
+    <string name="benefit_free_rides_forever">🎉 Viajes gratis para siempre</string>
+    <string name="benefit_no_payment_needed">💳 No se necesita pago</string>
+    <string name="enjoy_free_rides">¡Disfruta tus viajes gratis! No se requiere suscripción.</string>
+    <string name="how_it_works">📅 Cómo funciona:</string>
+    <string name="promo_full_month">• Tu anuncio se publica el mes completo (30 días)</string>
+    <string name="promo_free_weeks">• Las primeras 2 semanas son completamente GRATIS</string>
+    <string name="promo_pay_weeks">• Solo pagas por las semanas 3 y 4</string>
+    <string name="promo_cancel">• ¡Cancela cuando quieras durante el período gratis!</string>
+    <string name="total_label">Total</string>
+    <string name="you_save_promo">🎉 ¡Ahorras $%s con código promocional!</string>
+    <string name="ad_is_free">¡Tu anuncio es GRATIS!</string>
+    <string name="no_payment_required">No se requiere pago con el código: %s</string>
+    <string name="submit_free_ad">Enviar Anuncio GRATIS</string>
+    <string name="pay_with_google_play">Pagar con Google Play - $%s</string>
+    <string name="payment_required">Se requiere pago para enviar tu anuncio</string>
+    <string name="confirm_payment_title">Confirmar Pago</string>
+    <string name="payment_confirm_question">¿Completaste el pago con tarjeta de crédito de $%s?</string>
+    <string name="payment_confirm_desc">Al confirmar, tu anuncio %s para \"%s\" será enviado para revisión.</string>
+    <string name="yes_submit_ad">Sí, Enviar Mi Anuncio</string>
+    <string name="not_yet">Todavía No</string>
+    <string name="remove">Eliminar</string>
+    
+    <!-- Driver Offers / Rejection -->
+    <string name="price_rejected">❌ Precio Rechazado: $%s</string>
+    <string name="too_high_submit_lower">¡Muy alto! Envía un precio más bajo</string>
+    <string name="submit_new_price">Enviar nuevo precio</string>
+    <string name="waiting_for_rider">Esperando al pasajero...</string>
+    <string name="driver_offers_available">%d Oferta%s de Conductor Disponible%s</string>
+    <string name="accept_offer">Aceptar oferta</string>
+    <string name="reject_price_too_high">Rechazar - precio muy alto</string>
+    
+    <!-- Driver Online Status -->
+    <string name="pending_ride_requests">Solicitudes de Viaje Pendientes</string>
+    <string name="go_online_title">¡Conéctate!</string>
+    <string name="go_offline_warning">⚠️ Te desconectarás al cambiar de vehículo</string>
+    
+    <!-- Driver Ride Status Buttons -->
+    <string name="connect_to_passenger">Conectar con tu pasajero</string>
+    <string name="arrived_at_pickup">Llegué al Punto de Recogida</string>
+    <string name="start_ride">Iniciar Viaje</string>
+    <string name="complete_ride">Completar Viaje</string>
+    <string name="waiting_for_passenger">Esperando al Pasajero</string>
+    
+    <!-- Rider Ride Status (additional) -->
+    <string name="on_the_way">¡En camino!</string>
+    <string name="on_the_way_to_you">En camino hacia ti</string>
+    <string name="driver_on_the_way">¡Conductor aceptó! En camino...</string>
+    <string name="driver_arrived_rider">¡Conductor llegó!</string>
+    <string name="arrived_rider">¡Llegó!</string>
+    <string name="car_on_the_way">🚗 ¡En camino!</string>
+    <string name="driver_arrived_icon">📍 ¡Conductor llegó!</string>
+    <string name="captain_has_arrived">¡El capitán ha llegado!</string>
+    <string name="driver_has_arrived">¡El conductor ha llegado!</string>
+    
+    <!-- News and Weather -->
+    <string name="local_news">📰 Noticias Locales</string>
+    <string name="local_news_weather">📰 Noticias y Clima</string>
+    <string name="weather">🌤️ Clima</string>
+    <string name="news">Noticias</string>
+    <string name="bocas_weather">Clima de Bocas del Toro</string>
+    <string name="feels_like">Sensación térmica</string>
+    <string name="humidity">Humedad</string>
+    <string name="wind">Viento</string>
+    <string name="forecast">Pronóstico de 5 Días</string>
+    <string name="read_more">Leer Más</string>
+    <string name="refresh_news">Actualizar</string>
+    <string name="loading_news">Cargando noticias...</string>
+    <string name="no_news">No hay noticias disponibles</string>
+    <string name="news_error">No se pudieron cargar las noticias</string>
+    <string name="today">Hoy</string>
+    <string name="tomorrow">Mañana</string>
+    <string name="bocas_breeze">Bocas Breeze</string>
+    <string name="panama_news">Noticias de Panamá</string>
+    <string name="latest_news">Últimas Noticias</string>
+    <string name="pull_to_refresh">Desliza para actualizar</string>
 </resources>

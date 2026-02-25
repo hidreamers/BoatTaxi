@@ -1,22 +1,31 @@
 package com.boattaxie.app.ui.screens.auth
 
+import android.content.Context
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.boattaxie.app.R
 import com.boattaxie.app.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -26,12 +35,25 @@ fun SplashScreen(
     onNavigateToHome: () -> Unit,
     onNavigateToDriverHome: () -> Unit,
     onNavigateToVerification: () -> Unit,
+    onNavigateToOnboarding: () -> Unit = {},
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     val authState by viewModel.authState.collectAsState()
+    val context = LocalContext.current
+    
+    // Check if first launch
+    val prefs = remember { context.getSharedPreferences("boat_taxie_prefs", Context.MODE_PRIVATE) }
+    val isFirstLaunch = remember { prefs.getBoolean("is_first_launch", true) }
     
     LaunchedEffect(authState) {
         delay(1500) // Show splash for at least 1.5 seconds
+        
+        // If first launch, show onboarding
+        if (isFirstLaunch) {
+            prefs.edit().putBoolean("is_first_launch", false).apply()
+            onNavigateToOnboarding()
+            return@LaunchedEffect
+        }
         
         when (authState) {
             is AuthState.LoggedIn -> {
@@ -50,28 +72,20 @@ fun SplashScreen(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Animated icons
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.DirectionsBoat,
-                    contentDescription = "Boat",
-                    modifier = Modifier.size(64.dp),
-                    tint = BoatColor
-                )
-                Icon(
-                    imageVector = Icons.Default.LocalTaxi,
-                    contentDescription = "Taxi",
-                    modifier = Modifier.size(64.dp),
-                    tint = TaxiColor
-                )
-            }
+            // Logo
+            Image(
+                painter = painterResource(id = R.drawable.logo),
+                contentDescription = "OmniMap Logo",
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(RoundedCornerShape(16.dp)),
+                contentScale = ContentScale.Fit
+            )
             
             Spacer(modifier = Modifier.height(24.dp))
             
             Text(
-                text = "BoatTaxie",
+                text = "OmniMap",
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
                 color = Primary
@@ -80,7 +94,7 @@ fun SplashScreen(
             Spacer(modifier = Modifier.height(8.dp))
             
             Text(
-                text = "Your ride on water and land",
+                text = "Everything. Everywhere. Live.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = TextSecondary
             )
@@ -128,147 +142,111 @@ fun WelcomeScreen(
     onNavigateToSignUp: () -> Unit,
     viewModel: AuthViewModel = hiltViewModel()
 ) {
-    var showAccountTypeSelection by remember { mutableStateOf(false) }
-    var selectedAction by remember { mutableStateOf("") } // "login" or "signup"
+    // Go directly to login/signup - user type will be determined later
+    // Users start as RIDER and can become a driver by going through verification
     
-    if (showAccountTypeSelection) {
-        // Show Rider vs Driver selection
-        AccountTypeSelectionScreen(
-            actionType = selectedAction,
-            onRiderSelected = {
-                // Set user type to RIDER
-                viewModel.updateSelectedUserType(com.boattaxie.app.data.model.UserType.RIDER)
-                // For riders, go to login/signup
-                if (selectedAction == "login") {
-                    onNavigateToLogin()
-                } else {
-                    onNavigateToSignUp()
-                }
-            },
-            onDriverSelected = {
-                // Set user type to CAPTAIN (will select specific type later)
-                viewModel.updateSelectedUserType(com.boattaxie.app.data.model.UserType.CAPTAIN)
-                // For drivers, go to login/signup (they'll select vehicle type later)
-                if (selectedAction == "login") {
-                    onNavigateToLogin()
-                } else {
-                    onNavigateToSignUp()
-                }
-            },
-            onBack = { showAccountTypeSelection = false }
-        )
-    } else {
-        // Main welcome screen
+    // Main welcome screen - scrollable for smaller screens
+    val scrollState = rememberScrollState()
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(48.dp))
+        
+        // Logo and tagline
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(48.dp))
+            // Logo
+            Image(
+                painter = painterResource(id = R.drawable.logo),
+                contentDescription = "OmniMap Logo",
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(RoundedCornerShape(16.dp)),
+                contentScale = ContentScale.Fit
+            )
             
-            // Logo and tagline
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            Text(
+                text = "Welcome to OmniMap",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Text(
+                text = "The last map you'll ever need.\nExplore the world. Book rides in Bocas.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextSecondary,
+                textAlign = TextAlign.Center
+            )
+        }
+        
+        // Features list
+        Column(
+            modifier = Modifier.padding(vertical = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            FeatureItem(
+                icon = "🚤",
+                title = "Book Boats",
+                description = "Water taxis, speedboats, and more"
+            )
+            FeatureItem(
+                icon = "🚕",
+                title = "Book Taxis",
+                description = "Quick and reliable taxi service"
+            )
+            FeatureItem(
+                icon = "💰",
+                title = "Affordable Pricing",
+                description = "Starting at just \$1.99/day"
+            )
+        }
+        
+        // Spacer to push buttons down on larger screens
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        // Buttons - go directly to login/signup
+        Column(
+            modifier = Modifier.padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                onClick = onNavigateToSignUp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = MaterialTheme.shapes.medium,
+                colors = ButtonDefaults.buttonColors(containerColor = Primary)
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DirectionsBoat,
-                        contentDescription = "Boat",
-                        modifier = Modifier.size(80.dp),
-                        tint = BoatColor
-                    )
-                    Icon(
-                        imageVector = Icons.Default.LocalTaxi,
-                        contentDescription = "Taxi",
-                        modifier = Modifier.size(80.dp),
-                        tint = TaxiColor
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(32.dp))
-                
                 Text(
-                    text = "Welcome to BoatTaxie",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Text(
-                    text = "Book boats and taxis with ease.\nWhether on water or land, we've got you covered.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextSecondary,
-                    textAlign = TextAlign.Center
+                    text = "Get Started",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
             
-            // Features list
-            Column(
-                modifier = Modifier.padding(vertical = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            OutlinedButton(
+                onClick = onNavigateToLogin,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = MaterialTheme.shapes.medium
             ) {
-                FeatureItem(
-                    icon = "🚤",
-                    title = "Book Boats",
-                    description = "Water taxis, speedboats, and more"
+                Text(
+                    text = "I already have an account",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
                 )
-                FeatureItem(
-                    icon = "🚕",
-                    title = "Book Taxis",
-                    description = "Quick and reliable taxi service"
-                )
-                FeatureItem(
-                    icon = "💰",
-                    title = "Affordable Pricing",
-                    description = "Starting at just \$2.99/day"
-                )
-            }
-            
-            // Buttons
-            Column(
-                modifier = Modifier.padding(bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Button(
-                    onClick = { 
-                        selectedAction = "signup"
-                        showAccountTypeSelection = true 
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
-                ) {
-                    Text(
-                        text = "Get Started",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                
-                OutlinedButton(
-                    onClick = { 
-                        selectedAction = "login"
-                        showAccountTypeSelection = true 
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = MaterialTheme.shapes.medium
-                ) {
-                    Text(
-                        text = "I already have an account",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
             }
         }
     }
@@ -305,13 +283,14 @@ fun AccountTypeSelectionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(24.dp))
             
             Text(
-                text = "How will you use BoatTaxie?",
+                text = "How will you use OmniMap?",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center

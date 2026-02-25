@@ -6,6 +6,7 @@ package com.boattaxie.app.navigation
 sealed class Screen(val route: String) {
     // Auth screens
     object Splash : Screen("splash")
+    object Onboarding : Screen("onboarding")
     object Welcome : Screen("welcome")
     object Login : Screen("login")
     object SignUp : Screen("signup")
@@ -74,6 +75,9 @@ sealed class Screen(val route: String) {
     object CreateAd : Screen("create_ad")
     object MyAds : Screen("my_ads")
     
+    // Explore screen - Real-time places discovery
+    object Explore : Screen("explore")
+    
     // Profile screens
     object Profile : Screen("profile")
     object EditProfile : Screen("edit_profile")
@@ -85,6 +89,7 @@ sealed class Screen(val route: String) {
     
     // Admin screens
     object AdminVerifications : Screen("admin_verifications")
+    object AdminDockLocations : Screen("admin_dock_locations")
 }
 
 /**
@@ -96,4 +101,8 @@ object NavArgs {
     const val PLAN_ID = "planId"
     const val AD_ID = "adId"
     const val IS_PICKUP = "isPickup"
+    const val PLACE_ID = "placeId"
+    const val PLACE_NAME = "placeName"
+    const val PLACE_LAT = "placeLat"
+    const val PLACE_LNG = "placeLng"
 }

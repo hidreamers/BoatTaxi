@@ -198,25 +198,22 @@ class VerificationRepository @Inject constructor(
         vehicleType: VehicleType
     ) {
         try {
-            // Call backend to send push notification to admin
-            val url = "https://boattaxi-boattaxi.up.railway.app/api/notify-admin-verification"
-            val client = java.net.HttpURLConnection::class.java
-            val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.doOutput = true
+            // Store notification request in Firestore for admin
+            // Firebase Cloud Functions can listen and send push notifications
+            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val notificationData = hashMapOf(
+                "type" to "verification_submission",
+                "submissionId" to submissionId,
+                "userName" to userName,
+                "vehicleType" to vehicleType.name,
+                "createdAt" to com.google.firebase.Timestamp.now(),
+                "read" to false
+            )
             
-            val json = """
-                {
-                    "submissionId": "$submissionId",
-                    "userName": "$userName",
-                    "vehicleType": "${vehicleType.name}"
-                }
-            """.trimIndent()
+            firestore.collection("admin_notifications")
+                .add(notificationData)
             
-            connection.outputStream.bufferedWriter().use { it.write(json) }
-            val responseCode = connection.responseCode
-            android.util.Log.d("VerificationRepo", "Admin notification sent, response: $responseCode")
+            android.util.Log.d("VerificationRepo", "Admin notification stored in Firestore")
         } catch (e: Exception) {
             android.util.Log.e("VerificationRepo", "Failed to notify admin: ${e.message}")
             // Don't fail the submission if notification fails
@@ -404,7 +401,7 @@ class VerificationRepository @Inject constructor(
                 .update(
                     mapOf(
                         "status" to "approved",
-                        "overallStatus" to VerificationStatus.APPROVED,
+                        "overallStatus" to "approved",  // Save as string for consistent deserialization
                         "reviewedBy" to adminId,
                         "reviewedAt" to Timestamp.now(),
                         "adminNotes" to adminNotes
@@ -453,7 +450,7 @@ class VerificationRepository @Inject constructor(
                 .update(
                     mapOf(
                         "status" to "rejected",
-                        "overallStatus" to VerificationStatus.REJECTED,
+                        "overallStatus" to "rejected",  // Save as string for consistent deserialization
                         "reviewedBy" to adminId,
                         "reviewedAt" to Timestamp.now(),
                         "adminNotes" to reason
@@ -475,6 +472,62 @@ class VerificationRepository @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             android.util.Log.e("VerificationRepo", "Error rejecting submission: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Delete a user and their verification submission (Admin only)
+     * This completely removes the user from the system
+     */
+    suspend fun deleteUserAndSubmission(submissionId: String, userId: String): Result<Unit> {
+        return try {
+            // Delete verification submission
+            firestore.collection("verification_submissions")
+                .document(submissionId)
+                .delete()
+                .await()
+            
+            // Delete all verification documents for this user
+            val userDocs = firestore.collection("verification_documents")
+                .whereEqualTo("userId", userId)
+                .get()
+                .await()
+            
+            for (doc in userDocs.documents) {
+                doc.reference.delete().await()
+            }
+            
+            // Delete user document
+            firestore.collection("users")
+                .document(userId)
+                .delete()
+                .await()
+            
+            // Delete any bookings by this user
+            val userBookings = firestore.collection("bookings")
+                .whereEqualTo("riderId", userId)
+                .get()
+                .await()
+            
+            for (booking in userBookings.documents) {
+                booking.reference.delete().await()
+            }
+            
+            // Delete any bookings where this user was the driver
+            val driverBookings = firestore.collection("bookings")
+                .whereEqualTo("driverId", userId)
+                .get()
+                .await()
+            
+            for (booking in driverBookings.documents) {
+                booking.reference.delete().await()
+            }
+            
+            android.util.Log.d("VerificationRepo", "Deleted user and all related data: $userId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            android.util.Log.e("VerificationRepo", "Error deleting user: ${e.message}", e)
             Result.failure(e)
         }
     }

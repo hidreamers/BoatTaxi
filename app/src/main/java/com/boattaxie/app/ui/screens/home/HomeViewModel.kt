@@ -20,7 +20,18 @@ data class HomeUiState(
     val recentTrips: List<Booking> = emptyList(),
     val featuredAds: List<Advertisement> = emptyList(),
     val errorMessage: String? = null,
-    val switchToDriverMode: Boolean = false
+    val switchToDriverMode: Boolean = false,
+    val unratedBookingId: String? = null,
+    // Real-time active users count
+    val activeRiders: Int = 0,
+    val activeDrivers: Int = 0,
+    val totalActiveUsers: Int = 0,
+    // News and Weather
+    val newsArticles: List<NewsArticle> = emptyList(),
+    val weather: WeatherData? = null,
+    val weatherForecast: List<WeatherForecast> = emptyList(),
+    val isLoadingNews: Boolean = false,
+    val newsError: String? = null
 )
 
 @HiltViewModel
@@ -28,7 +39,9 @@ class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val bookingRepository: BookingRepository,
-    private val advertisementRepository: AdvertisementRepository
+    private val advertisementRepository: AdvertisementRepository,
+    private val activeUsersRepository: ActiveUsersRepository,
+    private val newsRepository: NewsRepository
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -39,6 +52,45 @@ class HomeViewModel @Inject constructor(
         observeSubscription()
         loadRecentTrips()
         loadFeaturedAds()
+        trackActiveUser()
+        observeActiveUsers()
+        loadNewsAndWeather()
+    }
+    
+    /**
+     * Mark current user as active and track presence
+     */
+    private fun trackActiveUser() {
+        viewModelScope.launch {
+            authRepository.observeCurrentUser().collect { user ->
+                if (user != null) {
+                    val isDriver = user.userType == UserType.DRIVER
+                    activeUsersRepository.setUserActive(isDriver)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Observe real-time active user count
+     */
+    private fun observeActiveUsers() {
+        viewModelScope.launch {
+            activeUsersRepository.getActiveUsersCount().collect { count ->
+                _uiState.update {
+                    it.copy(
+                        activeRiders = count.riders,
+                        activeDrivers = count.drivers,
+                        totalActiveUsers = count.totalUsers
+                    )
+                }
+            }
+        }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        activeUsersRepository.setUserInactive()
     }
     
     private fun loadUserData() {
@@ -84,6 +136,27 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(errorMessage = null) }
     }
     
+    /**
+     * Check if there's a completed booking that hasn't been rated yet
+     */
+    fun checkForUnratedBooking() {
+        viewModelScope.launch {
+            try {
+                val unratedBooking = bookingRepository.getUnratedCompletedBooking()
+                if (unratedBooking != null) {
+                    android.util.Log.d("HomeVM", "Found unrated booking: ${unratedBooking.id}")
+                    _uiState.update { it.copy(unratedBookingId = unratedBooking.id) }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("HomeVM", "Error checking for unrated booking", e)
+            }
+        }
+    }
+    
+    fun clearUnratedBooking() {
+        _uiState.update { it.copy(unratedBookingId = null) }
+    }
+    
     private fun observeSubscription() {
         viewModelScope.launch {
             subscriptionRepository.observeSubscription().collect { subscription ->
@@ -127,12 +200,61 @@ class HomeViewModel @Inject constructor(
         }
     }
     
+    // Track which ads have already had impressions recorded this session
+    private val recordedImpressions = mutableSetOf<String>()
+    
+    fun recordAdImpression(adId: String) {
+        // Only record one impression per ad per session to avoid over-counting
+        if (adId !in recordedImpressions) {
+            recordedImpressions.add(adId)
+            viewModelScope.launch {
+                advertisementRepository.recordImpression(adId)
+            }
+        }
+    }
+    
     fun refresh() {
         _uiState.update { it.copy(isLoading = true) }
         loadRecentTrips()
         loadFeaturedAds()
+        loadNewsAndWeather()
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = false) }
         }
+    }
+    
+    /**
+     * Load news articles and weather data
+     */
+    private fun loadNewsAndWeather() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingNews = true, newsError = null) }
+            
+            // Load news articles
+            newsRepository.fetchAllNews().onSuccess { articles ->
+                _uiState.update { it.copy(newsArticles = articles.take(10)) }
+            }.onFailure { error ->
+                _uiState.update { it.copy(newsError = error.message) }
+            }
+            
+            // Load current weather
+            newsRepository.fetchWeather().onSuccess { weather ->
+                _uiState.update { it.copy(weather = weather) }
+            }
+            
+            // Load forecast
+            newsRepository.fetchForecast().onSuccess { forecast ->
+                _uiState.update { it.copy(weatherForecast = forecast) }
+            }
+            
+            _uiState.update { it.copy(isLoadingNews = false) }
+        }
+    }
+    
+    /**
+     * Refresh news and weather
+     */
+    fun refreshNews() {
+        loadNewsAndWeather()
     }
 }

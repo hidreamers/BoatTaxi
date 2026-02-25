@@ -2,6 +2,8 @@ package com.boattaxie.app.ui.screens.verification
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -55,16 +57,53 @@ fun VehicleTypeSelectionScreen(
                     }
                 }
             )
+        },
+        // Fixed bottom bar for the button - always visible
+        bottomBar = {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shadowElevation = 8.dp,
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                ) {
+                    // Show error if any
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                    }
+                    
+                    PrimaryButton(
+                        text = "Continue to Verification",
+                        onClick = {
+                            // Set the vehicle selections in the ViewModel
+                            authViewModel.setVehicleSelections(hasBoat = hasBoat, hasTaxi = hasTaxi)
+                            signupTriggered = true
+                            authViewModel.signUp()
+                        },
+                        enabled = (hasBoat || hasTaxi) && !isLoading,
+                        isLoading = isLoading
+                    )
+                }
+            }
         }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             
             Text(
                 text = "What vehicles do you have?",
@@ -82,7 +121,7 @@ fun VehicleTypeSelectionScreen(
                 textAlign = TextAlign.Center
             )
             
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(32.dp))
             
             // Boat option (checkbox style)
             VehicleOptionCard(
@@ -104,7 +143,7 @@ fun VehicleTypeSelectionScreen(
                 onClick = { hasTaxi = !hasTaxi }
             )
             
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
             
             // Info card
             if (hasBoat && hasTaxi) {
@@ -171,31 +210,7 @@ fun VehicleTypeSelectionScreen(
                 }
             }
             
-            Spacer(modifier = Modifier.weight(1f))
-            
-            // Show error if any
-            if (errorMessage != null) {
-                Text(
-                    text = errorMessage!!,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-            }
-            
-            PrimaryButton(
-                text = "Continue to Verification",
-                onClick = {
-                    // Set the vehicle selections in the ViewModel
-                    authViewModel.setVehicleSelections(hasBoat = hasBoat, hasTaxi = hasTaxi)
-                    signupTriggered = true
-                    authViewModel.signUp()
-                },
-                enabled = (hasBoat || hasTaxi) && !isLoading,
-                isLoading = isLoading
-            )
-            
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
